@@ -35,7 +35,7 @@ def calculate_far(plot_area: float, eligible_built_up_area: float) -> float:
         eligible_built_up_area: Total covered/built-up area counted towards FAR.
 
     Returns:
-        float: Calculated FAR rounded to 4 decimal places.
+        float: Calculated exact FAR (unrounded).
 
     Raises:
         TypeError: If plot_area or eligible_built_up_area is not a number.
@@ -50,9 +50,9 @@ def calculate_far(plot_area: float, eligible_built_up_area: float) -> float:
     if built_num < 0:
         raise ValueError("Eligible built-up area cannot be negative.")
 
-    # Calculate FAR and round to 4 decimal places for precision & readability
-    far_value = built_num / plot_num
-    return round(far_value, 4)
+    # Calculate exact FAR without premature rounding.
+    # Rounding before comparison can cause non-compliant plans to be falsely approved.
+    return built_num / plot_num
 
 
 def validate_far(
@@ -90,10 +90,8 @@ def validate_far(
     if is_compliant:
         message = "FAR is within the permitted limit."
     else:
-        message = (
-            f"FAR exceeds the permitted limit by "
-            f"{round(calculated_far - allowed_num, 4)}."
-        )
+        excess = calculated_far - allowed_num
+        message = f"FAR exceeds the permitted limit by {excess:.6g}."
 
     return {
         "plot_area": float(plot_area),

@@ -56,7 +56,7 @@ def main() -> None:
         print(f"  Plot Area              : {result['plot_area']:.2f} sq.m")
         print(f"  Eligible Built-up Area : {result['eligible_built_up_area']:.2f} sq.m")
         print(f"  Permitted (Allowed) FAR: {result['allowed_far']:.4f}")
-        print(f"  Calculated FAR         : {result['calculated_far']:.4f}")
+        print(f"  Calculated FAR         : {result['calculated_far']:.6g}")
         print(f"  Status                 : {'COMPLIANT' if result['is_compliant'] else 'NON-COMPLIANT'}")
         print(f"  Remarks                : {result['message']}")
         print("-" * 60)

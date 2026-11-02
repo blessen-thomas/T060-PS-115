@@ -23,9 +23,9 @@ def test_calculate_far_standard():
 
 
 def test_calculate_far_fractional():
-    """Verify fractional precision: 2500 sq.m on 1500 sq.m plot rounds cleanly."""
-    # 2500 / 1500 = 1.666666... -> rounds to 1.6667
-    assert calculate_far(plot_area=1500.0, eligible_built_up_area=2500.0) == 1.6667
+    """Verify fractional precision: 2500 sq.m on 1500 sq.m plot returns exact ratio."""
+    # 2500 / 1500 = 1.666666...
+    assert calculate_far(plot_area=1500.0, eligible_built_up_area=2500.0) == pytest.approx(1.6666667)
 
 
 def test_calculate_far_zero_built_up_area():
@@ -105,5 +105,27 @@ def test_validate_far_exceeding_limit():
 
     assert result["is_compliant"] is False
     assert result["calculated_far"] == 2.0
+    assert result["allowed_far"] == 1.5
+    assert "exceeds the permitted limit" in result["message"]
+
+
+def test_validate_far_slight_overage_not_masked_by_rounding():
+    """Verify that an FAR slightly above allowed limit is NOT falsely approved due to rounding.
+
+    Scenario:
+        Plot Area = 10,000 sq.m, Built-up Area = 15,000.4 sq.m, Allowed FAR = 1.5
+        Actual FAR = 15000.4 / 10000.0 = 1.50004.
+        Both 1.50004 and 1.5000 round to 1.5000 at four decimal places.
+        If rounded before comparison, 1.5000 <= 1.5 would be True (false approval).
+        The engine must reject this plan as non-compliant.
+    """
+    result = validate_far(
+        plot_area=10000.0,
+        eligible_built_up_area=15000.4,
+        allowed_far=1.5,
+    )
+
+    assert result["is_compliant"] is False
+    assert result["calculated_far"] == 1.50004
     assert result["allowed_far"] == 1.5
     assert "exceeds the permitted limit" in result["message"]

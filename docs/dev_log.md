@@ -12,9 +12,10 @@ Establish a clean, modular Python project structure and implement the first core
 2. **Deterministic & Simple Code**:
    - Kept design strictly functional without unnecessary OOP classes or premature abstractions.
    - Used standard Python dictionaries for structured output, making the code easy to explain during viva examinations.
-3. **Comprehensive Input Validation**:
+3. **Comprehensive Input Validation & Precision**:
    - Enforced strict checks: `plot_area > 0` (preventing division-by-zero or physical absurdity), `eligible_built_up_area >= 0`, `allowed_far >= 0`.
    - Explicitly rejected non-numeric inputs and booleans.
+   - **Correctness Fix (Zero Tolerance for False Approvals)**: Removed premature rounding from `calculate_far()`. Compliance is strictly evaluated against the exact, unrounded FAR value so that slight overages (e.g. actual FAR 1.50004 against allowed 1.5000) are not masked into false compliance by rounding down.
 4. **Automated Testing**:
    - Implemented unit tests using `pytest` in `tests/test_far.py`.
    - Verified normal calculations, edge cases (zero built-up area), boundary limits (FAR == allowed FAR), non-compliance (FAR > allowed FAR), and exception handling.
