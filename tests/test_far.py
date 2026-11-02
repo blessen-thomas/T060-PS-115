@@ -10,7 +10,7 @@ These tests cover:
 """
 
 import pytest
-from src.far import calculate_far, validate_far
+from src.far import calculate_far, get_base_far, validate_far
 
 
 # ==============================================================================
@@ -129,3 +129,130 @@ def test_validate_far_slight_overage_not_masked_by_rounding():
     assert result["calculated_far"] == 1.50004
     assert result["allowed_far"] == 1.5
     assert "exceeds the permitted limit" in result["message"]
+
+
+# ==============================================================================
+# 4. Base FAR Lookup Tests (Building Use & Road Width Bands)
+# ==============================================================================
+
+def test_base_far_band_below_12m():
+    """Verify Band 1 (road width < 12m): Residential/Mixed=1.75, Commercial=2.00."""
+    road = 9.0
+    assert get_base_far("residential", road) == 1.75
+    assert get_base_far("commercial", road) == 2.00
+    assert get_base_far("mixed_use", road) == 1.75
+
+
+def test_base_far_band_12m_to_18m_mid():
+    """Verify Band 2 (12m <= road width <= 18m) mid-range: Residential/Mixed=2.25, Commercial=2.50."""
+    road = 15.0
+    assert get_base_far("residential", road) == 2.25
+    assert get_base_far("commercial", road) == 2.50
+    assert get_base_far("mixed_use", road) == 2.25
+
+
+def test_base_far_band_above_18m():
+    """Verify Band 3 (road width > 18m): Residential/Mixed=2.50, Commercial=2.75."""
+    road = 24.0
+    assert get_base_far("residential", road) == 2.50
+    assert get_base_far("commercial", road) == 2.75
+    assert get_base_far("mixed_use", road) == 2.50
+
+
+# ==============================================================================
+# 5. Boundary Condition Tests (Exactly 12m and Exactly 18m)
+# ==============================================================================
+
+def test_base_far_boundary_exactly_12m():
+    """Road width of exactly 12m falls into Band 2 (from 12m through 18m)."""
+    assert get_base_far("residential", 12.0) == 2.25
+    assert get_base_far("commercial", 12.0) == 2.50
+    assert get_base_far("mixed_use", 12.0) == 2.25
+
+
+def test_base_far_boundary_exactly_18m():
+    """Road width of exactly 18m falls into Band 2 (from 12m through 18m)."""
+    assert get_base_far("residential", 18.0) == 2.25
+    assert get_base_far("commercial", 18.0) == 2.50
+    assert get_base_far("mixed_use", 18.0) == 2.25
+
+
+def test_base_far_boundary_just_below_12m():
+    """Road width of 11.99m is strictly below 12m -> falls into Band 1."""
+    assert get_base_far("residential", 11.99) == 1.75
+    assert get_base_far("commercial", 11.99) == 2.00
+    assert get_base_far("mixed_use", 11.99) == 1.75
+
+
+def test_base_far_boundary_just_above_18m():
+    """Road width of 18.01m is strictly above 18m -> falls into Band 3."""
+    assert get_base_far("residential", 18.01) == 2.50
+    assert get_base_far("commercial", 18.01) == 2.75
+    assert get_base_far("mixed_use", 18.01) == 2.50
+
+
+# ==============================================================================
+# 6. Base FAR Input Validation & String Normalization Tests
+# ==============================================================================
+
+def test_base_far_rejects_zero_or_negative_road_width():
+    """Road width <= 0 must be rejected with ValueError."""
+    with pytest.raises(ValueError, match="Road width must be greater than zero"):
+        get_base_far("residential", 0)
+
+    with pytest.raises(ValueError, match="Road width must be greater than zero"):
+        get_base_far("residential", -5.0)
+
+
+def test_base_far_rejects_non_numeric_road_width():
+    """Non-numeric or boolean road widths must be rejected with TypeError."""
+    with pytest.raises(TypeError, match="must be a number"):
+        get_base_far("residential", "12m")  # type: ignore
+
+    with pytest.raises(TypeError, match="must be a number"):
+        get_base_far("residential", True)  # type: ignore
+
+
+def test_base_far_rejects_unsupported_building_use():
+    """Unsupported building uses must raise ValueError with clear guidance."""
+    with pytest.raises(ValueError, match="Unsupported building use"):
+        get_base_far("industrial", 12.0)
+
+    with pytest.raises(ValueError, match="Unsupported building use"):
+        get_base_far("agricultural", 15.0)
+
+
+def test_base_far_rejects_non_string_building_use():
+    """Non-string building use must raise TypeError."""
+    with pytest.raises(TypeError, match="Building use must be a string"):
+        get_base_far(123, 12.0)  # type: ignore
+
+
+def test_base_far_string_normalization():
+    """Case variations, whitespace, and hyphens/spaces should be handled smoothly."""
+    assert get_base_far("  Residential  ", 10.0) == 1.75
+    assert get_base_far("COMMERCIAL", 10.0) == 2.00
+    assert get_base_far("Mixed Use", 15.0) == 2.25
+    assert get_base_far("mixed-use", 15.0) == 2.25
+
+
+# ==============================================================================
+# 7. Integration: validate_far with Automatic Base FAR Determination
+# ==============================================================================
+
+def test_validate_far_with_building_use_and_road_width():
+    """validate_far can derive allowed FAR directly from building use and road width."""
+    # Plot 1000 sq.m, built-up 2000 sq.m on a 12m road for residential -> base FAR 2.25
+    # Calculated FAR = 2000 / 1000 = 2.0 <= 2.25 -> COMPLIANT
+    result = validate_far(
+        plot_area=1000.0,
+        eligible_built_up_area=2000.0,
+        building_use="residential",
+        road_width=12.0,
+    )
+
+    assert result["is_compliant"] is True
+    assert result["allowed_far"] == 2.25
+    assert result["calculated_far"] == 2.0
+    assert result["building_use"] == "residential"
+    assert result["road_width"] == 12.0

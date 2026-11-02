@@ -21,6 +21,38 @@ Establish a clean, modular Python project structure and implement the first core
    - Verified normal calculations, edge cases (zero built-up area), boundary limits (FAR == allowed FAR), non-compliance (FAR > allowed FAR), and exception handling.
 
 ### Next Steps
-- Review with team/supervisor.
-- Once approved, commit initial structure to Git.
-- Prepare for subsequent business rules (e.g., fee calculation or zoning lookup tables according to PS-115 specifications).
+- Implement Base FAR lookup based on building use and road width.
+
+---
+
+## 2026-11-03: Base FAR Lookup by Building Use and Road Width
+
+### Objective
+Implement municipal zoning table lookup to dynamically determine permitted base FAR based on building use (Residential, Commercial, Mixed Use) and abutting road width.
+
+### Business Rules & Specifications
+- **Residential**:
+  - Road width < 12 m: FAR 1.75
+  - Road width 12 m through 18 m (inclusive): FAR 2.25
+  - Road width > 18 m: FAR 2.50
+- **Commercial**:
+  - Residential base FAR + 0.25 for corresponding road-width band.
+- **Mixed Use**:
+  - Equal to residential base FAR.
+
+### Architecture Decisions
+1. **New Function `get_base_far(building_use, road_width)`**:
+   - Accepts building category and road width in metres.
+   - Normalizes input strings (handles case sensitivity, whitespace, hyphens/underscores).
+   - Validates that road width > 0 and building use is supported (`residential`, `commercial`, `mixed_use`).
+   - Uses clear, readable conditionals (`width < 12.0`, `width <= 18.0`, else).
+2. **Backwards Compatible Integration**:
+   - `validate_far()` extended to accept either explicit `allowed_far` or `(building_use, road_width)`.
+   - Existing tests remain 100% operational.
+3. **Interactive CLI Updates**:
+   - The CLI prompts user for building use and road width, automatically computes base FAR, and eliminates manual allowed FAR input.
+4. **Comprehensive Test Suite**:
+   - Added unit tests for all 3 road-width bands x 3 building uses (9 combinations).
+   - Added explicit tests for exact boundary points (12.0 m, 18.0 m, 11.99 m, 18.01 m).
+   - Added validation tests for negative/zero road widths and unsupported building uses.
+   - Total test count expanded from 13 to 26 passing tests.

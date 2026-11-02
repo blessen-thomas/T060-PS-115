@@ -8,16 +8,27 @@
 
 ## 1. Project Overview
 
-This project implements an automated municipal compliance engine for building-plan approvals. In this first phase, it implements **Rule 1: Floor Area Ratio (FAR) Calculation and Compliance Check**.
+This project implements an automated municipal compliance engine for building-plan approvals according to official PS-115 specifications.
 
-### What is FAR?
-**Floor Area Ratio (FAR)** is a zoning metric that regulates the density and bulk of buildings. It is defined as:
+### Core Business Rules Implemented
 
-$$\text{FAR} = \frac{\text{Eligible Built-Up Area}}{\text{Plot Area}}$$
+#### Rule 1: Floor Area Ratio (FAR) Calculation & Validation
+- **Definition**: $\text{FAR} = \frac{\text{Eligible Built-Up Area}}{\text{Plot Area}}$
+- **Compliance Condition**:
+  - **COMPLIANT** if $\text{Calculated FAR} \le \text{Permitted FAR}$.
+  - **NON-COMPLIANT** if $\text{Calculated FAR} > \text{Permitted FAR}$.
+- **Precision Rule**: Evaluation is performed on exact mathematical ratios to prevent false positive approvals caused by rounding near boundary limits.
 
-A building plan is:
-- **Compliant** if $\text{Calculated FAR} \le \text{Permitted (Allowed) FAR}$.
-- **Non-Compliant** if $\text{Calculated FAR} > \text{Permitted (Allowed) FAR}$.
+#### Rule 2: Base FAR Lookup by Building Use and Road Width
+The permitted base FAR is determined automatically based on the abutting road width and the building use category:
+
+| Abutting Road Width | Residential | Commercial (+0.25) | Mixed Use |
+| :--- | :---: | :---: | :---: |
+| **Below 12 m** (`< 12.0`) | **1.75** | **2.00** | **1.75** |
+| **From 12 m through 18 m** (`12.0 <= width <= 18.0`) | **2.25** | **2.50** | **2.25** |
+| **Above 18 m** (`> 18.0`) | **2.50** | **2.75** | **2.50** |
+
+*Note: Mixed use adopts residential values. Commercial use receives a +0.25 bonus over the residential band.*
 
 ---
 
@@ -86,17 +97,26 @@ Municipal Building-Plan Approval System: FAR Compliance Check
 Team T060 | Problem Statement PS-115
 ============================================================
 
-Enter Plot Area (sq. metres): 1200
-Enter Eligible Built-up Area (sq. metres): 1800
-Enter Allowed FAR limit (e.g., 1.5, 2.0): 1.5
+Select Building Use:
+  1. Residential
+  2. Commercial
+  3. Mixed Use
+Enter choice (1-3 or name): 1
+Enter Abutting Road Width in metres: 12
+  -> Permitted Base FAR: 2.2500
+
+Enter Plot Area (sq. metres): 1000
+Enter Eligible Built-up Area (sq. metres): 2000
 
 ------------------------------------------------------------
 COMPLIANCE REPORT
 ------------------------------------------------------------
-  Plot Area              : 1200.00 sq.m
-  Eligible Built-up Area : 1800.00 sq.m
-  Permitted (Allowed) FAR: 1.5000
-  Calculated FAR         : 1.5000
+  Building Use           : Residential
+  Road Width             : 12.00 m
+  Permitted (Base) FAR   : 2.2500
+  Plot Area              : 1000.00 sq.m
+  Eligible Built-up Area : 2000.00 sq.m
+  Calculated FAR         : 2
   Status                 : COMPLIANT
   Remarks                : FAR is within the permitted limit.
 ------------------------------------------------------------
