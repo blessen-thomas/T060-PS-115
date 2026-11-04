@@ -30,6 +30,22 @@ The permitted base FAR is determined automatically based on the abutting road wi
 
 *Note: Mixed use adopts residential values. Commercial use receives a +0.25 bonus over the residential band.*
 
+#### Rule 3: Eligible Built-up Area Deductions
+Built-up area counted towards FAR excludes non-habitable and parking utility areas:
+$$\text{Eligible Built-up Area} = \text{Total Built-up Area} - \text{Stilt Parking} - \text{Parking Basement} - (0.10 \times \text{Balcony Area})$$
+
+#### Rule 4: Premium FAR
+- Allows up to **+0.5** additional FAR.
+- Available only on roads with width of at least **12 metres**.
+- Charges:
+  - **Residential**: 40% of guidance value per sq.m.
+  - **Commercial**: 60% of guidance value per sq.m.
+
+#### Rule 5: Transferable Development Rights (TDR) & Combined Cap
+- TDR can add up to **+0.4** FAR.
+- **Combined Additional Cap**: Premium FAR + TDR together cannot exceed **0.6** ($\text{Max Final Permitted FAR} = \text{Base FAR} + 0.6$).
+- Excess requests beyond the 0.6 cap are strictly rejected.
+
 ---
 
 ## 2. Project Directory Structure
@@ -92,32 +108,55 @@ python src/cli.py
 
 ### Example Usage:
 ```text
-============================================================
+=================================================================
 Municipal Building-Plan Approval System: FAR Compliance Check
 Team T060 | Problem Statement PS-115
-============================================================
+=================================================================
 
 Select Building Use:
   1. Residential
   2. Commercial
   3. Mixed Use
 Enter choice (1-3 or name): 1
-Enter Abutting Road Width in metres: 12
+Enter Abutting Road Width in metres: 15
   -> Permitted Base FAR: 2.2500
 
-Enter Plot Area (sq. metres): 1000
-Enter Eligible Built-up Area (sq. metres): 2000
+Additional FAR (optional, press Enter for 0):
+  Enter requested Premium FAR (max 0.5, road >= 12m) [0]: 0.3
+  Enter requested TDR FAR (max 0.4) [0]: 0.2
+  Enter Guidance Value per sq.m for premium calculation: 10000
 
-------------------------------------------------------------
-COMPLIANCE REPORT
-------------------------------------------------------------
-  Building Use           : Residential
-  Road Width             : 12.00 m
-  Permitted (Base) FAR   : 2.2500
-  Plot Area              : 1000.00 sq.m
-  Eligible Built-up Area : 2000.00 sq.m
-  Calculated FAR         : 2
-  Status                 : COMPLIANT
-  Remarks                : FAR is within the permitted limit.
-------------------------------------------------------------
+Enter Plot Area (sq. metres): 1000
+
+Built-up Area Details:
+  Do you want to specify area exclusions (parking, balcony)? (y/n) [n]: y
+  Enter Total Built-up Area (sq. metres): 3100
+  Enter Stilt Parking Area (sq.m, 100% excluded) [0]: 200
+  Enter Basement Parking Area (sq.m, 100% excluded) [0]: 100
+  Enter Balcony Area (sq.m, 10% excluded) [0]: 500
+  -> Calculated Eligible Built-up Area: 2750.00 sq.m
+
+-----------------------------------------------------------------
+COMPLIANCE & APPROVAL REPORT
+-----------------------------------------------------------------
+  Building Use               : Residential
+  Abutting Road Width        : 15.00 m
+  Plot Area                  : 1000.00 sq.m
+  Total Built-up Area        : 3100.00 sq.m
+  Eligible Built-up Area     : 2750.00 sq.m
+  Base FAR                   : 2.2500
+  Premium FAR                : 0.3000
+  TDR FAR                    : 0.2000
+  Final Permitted FAR        : 2.7500
+  Calculated Proposed FAR    : 2.75
+  Compliance Status          : COMPLIANT
+  Remarks                    : FAR is within the permitted limit.
+-----------------------------------------------------------------
+PREMIUM FAR CHARGES
+-----------------------------------------------------------------
+  Guidance Value             : 10000.00 / sq.m
+  Charge Rate (40%)          : 4000.00 / sq.m
+  Chargeable Additional Area : 300.00 sq.m
+  Total Premium FAR Fee      : 1200000.00
+-----------------------------------------------------------------
 ```
