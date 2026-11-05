@@ -1,0 +1,15 @@
+fee_code,rate,unit,notes
+SCRUTINY,20.00,Rs per sq m built-up,minimum Rs 2000
+SCRUTINY_MIN,2000.00,Rs,
+DEV_RESIDENTIAL,300.00,Rs per sq m,
+DEV_COMMERCIAL,600.00,Rs per sq m,
+PREMIUM_FAR_RES,40.00,pct of guidance value per sq m,roads >= 12 m only
+PREMIUM_FAR_COM,60.00,pct of guidance value per sq m,roads >= 12 m only
+BETTERMENT_LEVY,2.00,pct of plot guidance value,agri-converted plots
+LABOUR_CESS,1.00,pct of construction cost,cost Rs 1800 per sq ft
+CONSTRUCTION_COST,1800.00,Rs per sq ft,1 sq m = 10.7639 sq ft
+PARKING_SHORTFALL,200000.00,Rs per car,shortfall up to 20%
+REVIVAL,25.00,pct of scrutiny fee,"once, within 60 days of lapse"
+EXTENSION,10.00,pct of original fees,"one-time, 1 year"
+REVALIDATION,5000.00,Rs,commencement not reported within 6 months
+SETBACK_COMPOUNDING,10000.00,Rs per metre-side,deviation <= 0.3 m

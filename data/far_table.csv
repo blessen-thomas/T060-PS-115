@@ -1,0 +1,13 @@
+zone_id,road_width_from_m,from_inclusive,road_width_to_m,to_inclusive,base_far
+ZN-R1,0.00,true,12.00,false,1.75
+ZN-R1,12.00,true,18.00,true,2.25
+ZN-R1,18.00,false,99.00,true,2.50
+ZN-R2,0.00,true,12.00,false,1.75
+ZN-R2,12.00,true,18.00,true,2.25
+ZN-R2,18.00,false,99.00,true,2.50
+ZN-C1,0.00,true,12.00,false,2.00
+ZN-C1,12.00,true,18.00,true,2.50
+ZN-C1,18.00,false,99.00,true,2.75
+ZN-MX,0.00,true,12.00,false,1.75
+ZN-MX,12.00,true,18.00,true,2.25
+ZN-MX,18.00,false,99.00,true,2.50

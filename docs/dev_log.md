@@ -85,3 +85,13 @@ Implement Tasks 1, 2, and 3:
 4. **Test Suite Expansion**:
    - Expanded from 26 to 51 passing automated tests in `tests/test_far.py`.
    - Validated exact boundaries: Premium 0.5, TDR 0.4, Road 12.0m, Combined Cap 0.6, and official 0.9 combination exceeding cap by 0.3.
+
+---
+
+## 2026-11-05: Official Dataset Integration & CSV Data Loader Module
+
+### Objectives
+1. Place official municipal data pack files into project under `data/` without modifying the original sample directory.
+2. Implement `src/data_loader.py` using Python's standard `csv` library for typed parsing of zones, FAR tables, setbacks, coverage, fee schedules, applications, and floors.
+3. Build robust interval-matching logic (`check_interval()`) respecting explicit inclusive/exclusive lower and upper bounds.
+4. Add comprehensive unit tests in `tests/test_data_loader.py` covering type parsing, table loading, and boundary checks (total tests increased from 51 to 68).

@@ -1,0 +1,7 @@
+setback_type,measure,from_m,from_inclusive,to_m,to_inclusive,setback_m
+FRONT,ROAD_WIDTH,0.00,true,12.00,false,3.00
+FRONT,ROAD_WIDTH,12.00,true,18.00,true,4.50
+FRONT,ROAD_WIDTH,18.00,false,99.00,true,6.00
+SIDE_REAR,PLOT_WIDTH,0.00,true,9.00,true,1.00
+SIDE_REAR,PLOT_WIDTH,9.00,false,12.00,true,1.50
+SIDE_REAR,PLOT_WIDTH,12.00,false,999.00,true,2.00

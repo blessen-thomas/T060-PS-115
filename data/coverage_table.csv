@@ -1,0 +1,4 @@
+plot_area_from_sqm,from_inclusive,plot_area_to_sqm,to_inclusive,max_coverage_pct
+0.00,true,200.00,true,65.00
+200.00,false,500.00,true,60.00
+500.00,false,999999.00,true,50.00

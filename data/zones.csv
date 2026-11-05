@@ -1,0 +1,5 @@
+zone_id,zone_name,zone_category,permitted_uses,height_cap_road_lt_12_m,height_cap_road_ge_12_m
+ZN-R1,Residential (Main) - Jayanagar/Basavanagudi,RESIDENTIAL,RESIDENTIAL,15.00,24.00
+ZN-R2,Residential (Mixed) - Whitefield/Hoodi,RESIDENTIAL,RESIDENTIAL;MIXED,15.00,24.00
+ZN-C1,Commercial (Central) - MG Road/Brigade Road,COMMERCIAL,COMMERCIAL;MIXED,30.00,30.00
+ZN-MX,Mixed Use - Hebbal/Yelahanka,MIXED,RESIDENTIAL;COMMERCIAL;MIXED,15.00,24.00
