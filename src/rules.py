@@ -12,7 +12,7 @@ a standardized dictionary matching the official validation report format:
 
 from __future__ import annotations
 
-from src.data_loader import lookup_max_coverage
+from src.data_loader import lookup_max_coverage, lookup_setback
 
 
 def check_zoning_use(
@@ -137,4 +137,264 @@ def check_ground_coverage(
         "proposed": f"{actual_coverage_pct:.2f}%",
         "compoundable": False,
     }
+
+
+# ==============================================================================
+# Helper Functions for Setback Validation
+# ==============================================================================
+
+def _validate_numeric(val: any, field_name: str, allow_zero: bool = True) -> float:
+    """Validate that value is a real number and conforms to positivity constraints."""
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise TypeError(f"{field_name} must be a number (int or float).")
+    num = float(val)
+    if allow_zero:
+        if num < 0:
+            raise ValueError(f"{field_name} cannot be negative.")
+    else:
+        if num <= 0:
+            raise ValueError(f"{field_name} must be greater than zero.")
+    return num
+
+
+def _evaluate_setback(
+    rule_id: str,
+    check_description: str,
+    required_m: float,
+    proposed_m: float,
+) -> dict:
+    """Evaluate setback compliance and compounding eligibility.
+
+    Rules:
+        - passed: True if proposed >= required, else False.
+        - compoundable: True if deviation <= 0.30m (30 cm shortfall), else False.
+        - If passed, compoundable is False (no violation).
+    """
+    # Round deviation to 4 decimal places to prevent IEEE 754 precision issues (e.g. 1.5 - 1.2 = 0.30000000000000004)
+    deviation = round(required_m - proposed_m, 4)
+    passed = deviation <= 0.0
+    compoundable = (not passed) and (deviation <= 0.30)
+
+    return {
+        "passed": passed,
+        "rule_id": rule_id,
+        "check": check_description,
+        "required": f"{required_m:.2f}m",
+        "proposed": f"{proposed_m:.2f}m",
+        "compoundable": compoundable,
+    }
+
+
+# ==============================================================================
+# Setback Validation Rules
+# ==============================================================================
+
+def check_front_setback(
+    proposed_front_m: float,
+    road_width_m: float,
+    setback_table: list[dict],
+    is_corner_plot: bool = False,
+    second_road_width_m: float | None = None,
+) -> dict:
+    """Validate proposed front setback against municipal road-width requirements.
+
+    Rule ID:
+        SETBACK_FRONT
+
+    Road Width Bands:
+        - Below 12m: 3.00m
+        - 12m to 18m inclusive: 4.50m
+        - Above 18m: 6.00m
+
+    Corner Plot Rule:
+        The larger road is treated as the front road.
+        If both roads are equal in width, either may be treated as the front road.
+
+    Args:
+        proposed_front_m: Proposed front open space in metres.
+        road_width_m: Primary abutting road width in metres.
+        setback_table: Parsed rows from setback_table.csv.
+        is_corner_plot: Whether the plot is situated at a road junction.
+        second_road_width_m: Optional width of the secondary abutting road in metres.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prop = _validate_numeric(proposed_front_m, "Proposed front setback", allow_zero=True)
+    rw1 = _validate_numeric(road_width_m, "Road width", allow_zero=False)
+
+    effective_road_w = rw1
+    if is_corner_plot and second_road_width_m is not None:
+        rw2 = _validate_numeric(second_road_width_m, "Second road width", allow_zero=False)
+        effective_road_w = max(rw1, rw2)
+
+    required_m = lookup_setback(setback_table, "FRONT", effective_road_w)
+    return _evaluate_setback(
+        rule_id="SETBACK_FRONT",
+        check_description=f"Front setback for road width {effective_road_w:.2f}m",
+        required_m=required_m,
+        proposed_m=prop,
+    )
+
+
+def check_side_setback_1(
+    proposed_side1_m: float,
+    plot_width_m: float,
+    setback_table: list[dict],
+) -> dict:
+    """Validate proposed side setback 1 against plot-width requirements.
+
+    Rule ID:
+        SETBACK_SIDE1
+
+    Plot Width Bands:
+        - Up to 9m inclusive: 1.00m
+        - Above 9m to 12m inclusive: 1.50m
+        - Above 12m: 2.00m
+
+    Args:
+        proposed_side1_m: Proposed side 1 open space in metres.
+        plot_width_m: Frontage / plot width in metres.
+        setback_table: Parsed rows from setback_table.csv.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prop = _validate_numeric(proposed_side1_m, "Proposed side setback 1", allow_zero=True)
+    pw = _validate_numeric(plot_width_m, "Plot width", allow_zero=False)
+
+    required_m = lookup_setback(setback_table, "SIDE_REAR", pw)
+    return _evaluate_setback(
+        rule_id="SETBACK_SIDE1",
+        check_description=f"Side setback 1 for plot width {pw:.2f}m",
+        required_m=required_m,
+        proposed_m=prop,
+    )
+
+
+def check_side_setback_2(
+    proposed_side2_m: float,
+    plot_width_m: float,
+    setback_table: list[dict],
+    is_corner_plot: bool = False,
+) -> dict:
+    """Validate proposed side setback 2 against plot-width requirements and corner rules.
+
+    Rule ID:
+        SETBACK_SIDE2
+
+    Rules:
+        - For normal plots: standard side setback based on plot width.
+        - For corner plots: standard side setback + 0.50m (facing second road).
+
+    Args:
+        proposed_side2_m: Proposed side 2 open space in metres.
+        plot_width_m: Frontage / plot width in metres.
+        setback_table: Parsed rows from setback_table.csv.
+        is_corner_plot: Whether the plot is situated at a road junction.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prop = _validate_numeric(proposed_side2_m, "Proposed side setback 2", allow_zero=True)
+    pw = _validate_numeric(plot_width_m, "Plot width", allow_zero=False)
+
+    base_setback_m = lookup_setback(setback_table, "SIDE_REAR", pw)
+    if is_corner_plot:
+        required_m = base_setback_m + 0.50
+        desc = f"Side setback 2 for corner plot (standard {base_setback_m:.2f}m + 0.50m second road)"
+    else:
+        required_m = base_setback_m
+        desc = f"Side setback 2 for plot width {pw:.2f}m"
+
+    return _evaluate_setback(
+        rule_id="SETBACK_SIDE2",
+        check_description=desc,
+        required_m=required_m,
+        proposed_m=prop,
+    )
+
+
+def check_rear_setback(
+    proposed_rear_m: float,
+    plot_width_m: float,
+    setback_table: list[dict],
+) -> dict:
+    """Validate proposed rear setback against plot-width requirements.
+
+    Rule ID:
+        SETBACK_REAR
+
+    Plot Width Bands:
+        - Up to 9m inclusive: 1.00m
+        - Above 9m to 12m inclusive: 1.50m
+        - Above 12m: 2.00m
+
+    Args:
+        proposed_rear_m: Proposed rear open space in metres.
+        plot_width_m: Frontage / plot width in metres.
+        setback_table: Parsed rows from setback_table.csv.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prop = _validate_numeric(proposed_rear_m, "Proposed rear setback", allow_zero=True)
+    pw = _validate_numeric(plot_width_m, "Plot width", allow_zero=False)
+
+    required_m = lookup_setback(setback_table, "SIDE_REAR", pw)
+    return _evaluate_setback(
+        rule_id="SETBACK_REAR",
+        check_description=f"Rear setback for plot width {pw:.2f}m",
+        required_m=required_m,
+        proposed_m=prop,
+    )
+
+
+def check_all_setbacks(
+    application: dict,
+    setback_table: list[dict],
+) -> list[dict]:
+    """Validate all four setbacks for a given application record.
+
+    Precedence:
+        Follows Ground Coverage in municipal evaluation precedence.
+        Order of evaluation:
+            1. SETBACK_FRONT
+            2. SETBACK_SIDE1
+            3. SETBACK_SIDE2
+            4. SETBACK_REAR
+
+    Args:
+        application: Dictionary containing application fields (as parsed by data_loader).
+        setback_table: Parsed rows from setback_table.csv.
+
+    Returns:
+        list[dict]: List of 4 validation report dictionaries.
+    """
+    is_corner = bool(application.get("is_corner_plot", False))
+    return [
+        check_front_setback(
+            proposed_front_m=application["front_setback_m"],
+            road_width_m=application["road_width_m"],
+            setback_table=setback_table,
+            is_corner_plot=is_corner,
+            second_road_width_m=application.get("second_road_width_m"),
+        ),
+        check_side_setback_1(
+            proposed_side1_m=application["side_setback_1_m"],
+            plot_width_m=application["plot_width_m"],
+            setback_table=setback_table,
+        ),
+        check_side_setback_2(
+            proposed_side2_m=application["side_setback_2_m"],
+            plot_width_m=application["plot_width_m"],
+            setback_table=setback_table,
+            is_corner_plot=is_corner,
+        ),
+        check_rear_setback(
+            proposed_rear_m=application["rear_setback_m"],
+            plot_width_m=application["plot_width_m"],
+            setback_table=setback_table,
+        ),
+    ]
 
