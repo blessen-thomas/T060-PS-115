@@ -12,6 +12,8 @@ a standardized dictionary matching the official validation report format:
 
 from __future__ import annotations
 
+from src.data_loader import lookup_max_coverage
+
 
 def check_zoning_use(
     zone_id: str,
@@ -70,6 +72,69 @@ def check_zoning_use(
         "check": f"Permitted building use in zone {clean_zone}",
         "required": required_display,
         "proposed": clean_use,
+        "compoundable": False,
+    }
+
+
+def check_ground_coverage(
+    ground_footprint_sqm: float,
+    plot_area_sqm: float,
+    coverage_table: list[dict],
+) -> dict:
+    """Validate whether the proposed ground footprint complies with maximum coverage limits.
+
+    Formula:
+        Coverage Percentage = (ground_footprint_sqm / plot_area_sqm) * 100
+
+    Rule ID:
+        GROUND_COVERAGE
+
+    Precedence:
+        Follows FAR in municipal evaluation precedence.
+
+    Args:
+        ground_footprint_sqm: Building footprint on ground (including stilt parking).
+        plot_area_sqm: Total area of the site/plot.
+        coverage_table: List of coverage table interval dictionaries from coverage_table.csv.
+
+    Returns:
+        dict: Standard validation report dictionary:
+            - passed: bool (True if actual coverage <= max permitted coverage)
+            - rule_id: 'GROUND_COVERAGE'
+            - check: Description of the coverage check
+            - required: Max allowed percentage string (e.g. '60.00%')
+            - proposed: Actual proposed percentage string (e.g. '61.11%')
+            - compoundable: False (ground coverage violations cannot be compounded)
+
+    Raises:
+        TypeError: If ground_footprint_sqm or plot_area_sqm is not numeric.
+        ValueError: If plot_area_sqm <= 0 or ground_footprint_sqm < 0.
+    """
+    if isinstance(plot_area_sqm, bool) or not isinstance(plot_area_sqm, (int, float)):
+        raise TypeError("Plot area must be a number (int or float).")
+    if isinstance(ground_footprint_sqm, bool) or not isinstance(ground_footprint_sqm, (int, float)):
+        raise TypeError("Ground footprint area must be a number (int or float).")
+
+    plot_num = float(plot_area_sqm)
+    footprint_num = float(ground_footprint_sqm)
+
+    if plot_num <= 0:
+        raise ValueError("Plot area must be greater than zero.")
+    if footprint_num < 0:
+        raise ValueError("Ground footprint area cannot be negative.")
+
+    max_coverage_pct = lookup_max_coverage(coverage_table, plot_num)
+
+    # Calculate actual percentage without premature rounding
+    actual_coverage_pct = (footprint_num / plot_num) * 100.0
+    passed = actual_coverage_pct <= max_coverage_pct
+
+    return {
+        "passed": passed,
+        "rule_id": "GROUND_COVERAGE",
+        "check": f"Ground coverage limit for plot area {plot_num:.2f} sq.m",
+        "required": f"{max_coverage_pct:.2f}%",
+        "proposed": f"{actual_coverage_pct:.2f}%",
         "compoundable": False,
     }
 
