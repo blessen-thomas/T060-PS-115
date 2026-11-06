@@ -209,3 +209,25 @@ Implement Tasks 1, 2, and 3:
 ### Testing
 - Created `tests/test_cc.py` with 11 comprehensive unit and integration tests.
 - Full test suite expanded to 158 passing tests.
+
+---
+
+## 2026-11-06: Milestone 5 — End-to-End Command Runner & 4-CSV Output Generation
+
+### Objectives
+1. Implement the unified command pipeline runner (`src/runner.py`) executing all 292 commands from `data/commands.txt` strictly in original file order.
+2. Implement statutory rule validation orchestrator (`validate_application`) evaluating all rules in canonical precedence order:
+   `ZONING_USE` -> `FAR_BASE` / `FAR_PREMIUM` / `FAR_TDR` / `FAR_CAP` / `FAR_ACHIEVED` -> `GROUND_COVERAGE` -> `SETBACK_FRONT` / `SETBACK_SIDE1` / `SETBACK_SIDE2` / `SETBACK_REAR` -> `HEIGHT_LIMIT` -> `PARKING`.
+3. Generate all four mandatory output files with exact column schemas and ordering:
+   - `validation_report.csv` (40 rows: 12 violation rows sorted by app_id and precedence + 28 `NONE` rows).
+   - `fee_demand.csv` (30 rows: fee breakdown for plans without non-compoundable violations; 10 fatal exclusions).
+   - `workflow.csv` (76 stage transition rows logged in chronological date order).
+   - `cc_decisions.csv` (6 rows: matching the 6 `CC_REQUEST` commands; 4 issued, 2 refused).
+4. Build deterministic export capability to any designated target output directory.
+
+### Testing & Verification
+- Created `tests/test_runner.py` verifying:
+  - Exact row counts, schemas, and sorting on all 4 CSV files.
+  - Correct exclusion of the 10 fatal violation applications from `fee_demand.csv`.
+  - Bitwise determinism across consecutive runs.
+- Full automated test suite expanded to 162 passing tests.
