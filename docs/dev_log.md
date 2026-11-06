@@ -95,3 +95,35 @@ Implement Tasks 1, 2, and 3:
 2. Implement `src/data_loader.py` using Python's standard `csv` library for typed parsing of zones, FAR tables, setbacks, coverage, fee schedules, applications, and floors.
 3. Build robust interval-matching logic (`check_interval()`) respecting explicit inclusive/exclusive lower and upper bounds.
 4. Add comprehensive unit tests in `tests/test_data_loader.py` covering type parsing, table loading, and boundary checks (total tests increased from 51 to 68).
+
+---
+
+## 2026-11-06: Milestone 2 — Municipal Fee Engine & Demand Calculation
+
+### Objectives
+1. Implement the complete municipal fee engine (`src/fees.py`) adhering to `fee_schedule.csv`, the PS-115 specification, and verified sample data.
+2. Build calculation functions for all six fee components:
+   - Scrutiny Fee (Rs 20/sq.m built-up, minimum Rs 2,000)
+   - Development Charge (Residential Rs 300/sq.m, Commercial Rs 600/sq.m, Mixed-Use floor breakdown)
+   - Premium FAR Fee (Chargeable area = premium FAR * plot area; 40% residential/mixed, 60% commercial)
+   - Betterment Levy (2% of plot guidance value on agri-converted land)
+   - Labour Welfare Cess (1% of construction cost @ Rs 1,800/sq.ft, 10.7639 sq.ft/sq.m)
+   - Parking Shortfall Fee (Rs 200,000 per missing car for allowable shortfall <= 20%)
+3. Implement `calculate_fee_demand(...)` assembling the exact `fee_demand.csv` schema with strict violation gating.
+4. Verify every fee calculation against all 27 official `FEE_PAYMENT` records in `commands.txt`.
+
+### Key Architectural Decisions & Evidence-Based Interpretations
+1. **Per-Component Rounding Rule**:
+   - Every individual fee component is rounded UP to the nearest Rs 10 (`ceil(fee / 10) * 10`).
+   - `total_fee` is the exact sum of these rounded components. Verified across all 27 official payments with zero deviation.
+2. **Floor-Level Mixed-Use Development Charge**:
+   - Rather than applying a single blended rate across the building, the engine uses floor-level data from `floors.csv`. Commercial floors are charged at Rs 600/sq.m; residential, parking, stilt, and basement floors are charged at Rs 300/sq.m.
+3. **Evidence-Based Interpretation — Mixed-Use Premium FAR Rate**:
+   - *Status*: The official brief explicitly defines 40% guidance value for residential and 60% for commercial, but does not provide an explicit text formula for mixed use.
+   - *Evidence*: Exhaustive audit of all 27 official payment records in `data/commands.txt` proved that mixed-use applications requesting premium FAR (e.g. APP-0008, APP-0040) calculate the fee using 40% of guidance value on `premium_far_requested * plot_area_sqm`. This yields a 100% exact rupee match.
+   - *Documentation*: This rate is recorded strictly as an evidence-based interpretation derived from official sample data, and is not misrepresented as an explicit written regulation in the brief.
+4. **Gating Rule**:
+   - Applications with non-compoundable violations (e.g. zoning, coverage, height, parking > 20%, FAR cap) produce no fee demand (`calculate_fee_demand` returns `None`). Compoundable setback deviations (<= 0.3m) do not block fee demand generation.
+5. **Testing & Verification**:
+   - Created `tests/test_fees.py` with 27 unit and integration tests (total test suite expanded to 135 passing tests).
+   - `test_all_27_official_fee_payments_match_exact_rupee` dynamically validates every initial fee payment in `commands.txt` with `diff == 0.0`.
