@@ -12,6 +12,8 @@ a standardized dictionary matching the official validation report format:
 
 from __future__ import annotations
 
+import math
+
 from src.data_loader import lookup_max_coverage, lookup_setback
 
 
@@ -397,4 +399,233 @@ def check_all_setbacks(
             setback_table=setback_table,
         ),
     ]
+
+
+# ==============================================================================
+# Height & Additional Floor Setback Validation
+# ==============================================================================
+
+def check_building_height(
+    proposed_height_m: float,
+    road_width_m: float,
+    zone_id: str,
+    zones: dict[str, dict],
+    setback_table: list[dict],
+    is_corner_plot: bool = False,
+    second_road_width_m: float | None = None,
+) -> dict:
+    """Validate proposed building height against geometric road limits and zone caps.
+
+    Formula / Rules:
+        1. Geometric limit: 1.5 * (effective_road_width + required_front_setback)
+        2. Zone height cap: from zones.csv based on road width:
+           - Road width < 12m: height_cap_road_lt_12_m
+           - Road width >= 12m: height_cap_road_ge_12_m
+        3. Permitted max height = min(geometric_limit, zone_height_cap)
+
+    Rule ID:
+        HEIGHT_LIMIT
+
+    Precedence:
+        Follows Setbacks in municipal evaluation precedence.
+
+    Compounding:
+        False (height violations can never be compounded).
+
+    Args:
+        proposed_height_m: Total proposed building height in metres.
+        road_width_m: Width of abutting road in metres.
+        zone_id: Municipal zone identifier.
+        zones: Dictionary of loaded zone records.
+        setback_table: Parsed rows from setback_table.csv.
+        is_corner_plot: Whether the plot is situated at a road corner.
+        second_road_width_m: Optional width of secondary road for corner plots.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prop_h = _validate_numeric(proposed_height_m, "Proposed building height", allow_zero=False)
+    rw1 = _validate_numeric(road_width_m, "Road width", allow_zero=False)
+
+    effective_rw = rw1
+    if is_corner_plot and second_road_width_m is not None:
+        rw2 = _validate_numeric(second_road_width_m, "Second road width", allow_zero=False)
+        effective_rw = max(rw1, rw2)
+
+    clean_zone = zone_id.strip() if isinstance(zone_id, str) else str(zone_id)
+    if clean_zone not in zones:
+        raise ValueError(f"Unknown zone_id: {clean_zone!r}")
+
+    zone = zones[clean_zone]
+    req_front_setback = lookup_setback(setback_table, "FRONT", effective_rw)
+    geometric_limit = 1.5 * (effective_rw + req_front_setback)
+
+    if effective_rw < 12.0:
+        zone_cap = zone["height_cap_road_lt_12_m"]
+    else:
+        zone_cap = zone["height_cap_road_ge_12_m"]
+
+    max_allowed_height = min(geometric_limit, zone_cap)
+    passed = prop_h <= max_allowed_height
+
+    return {
+        "passed": passed,
+        "rule_id": "HEIGHT_LIMIT",
+        "check": f"Height limit for road {effective_rw:.2f}m in zone {clean_zone}",
+        "required": f"{max_allowed_height:.2f}m",
+        "proposed": f"{prop_h:.2f}m",
+        "compoundable": False,
+    }
+
+
+def calculate_extra_height_setback(
+    floors_count: int,
+    base_floor_limit: int,
+    extra_per_floor: float = 0.5,
+) -> float:
+    """Calculate additional setback required on all sides for floors above a defined base allowance.
+
+    Rule:
+        Each additional floor above the base height allowance requires 0.5m extra setback on all sides.
+
+    Note:
+        The official PS-115 specification and sample data pack do not define a default
+        base floor allowance (e.g. 4 floors). To preserve rule integrity without inventing
+        unverified municipal rules, base_floor_limit must be provided explicitly.
+
+    Args:
+        floors_count: Number of storeys / floors above ground.
+        base_floor_limit: Explicit number of floors included in the base height allowance.
+        extra_per_floor: Extra setback required per floor exceeding the base (default 0.5m).
+
+    Returns:
+        float: Additional setback buffer in metres to add to all sides.
+    """
+    if isinstance(floors_count, bool) or not isinstance(floors_count, int):
+        raise TypeError("Floors count must be an integer.")
+    if isinstance(base_floor_limit, bool) or not isinstance(base_floor_limit, int):
+        raise TypeError("base_floor_limit must be an integer.")
+    if floors_count < 0:
+        raise ValueError("Floors count cannot be negative.")
+    if base_floor_limit < 0:
+        raise ValueError("base_floor_limit cannot be negative.")
+
+    if floors_count > base_floor_limit:
+        return (floors_count - base_floor_limit) * extra_per_floor
+    return 0.0
+
+
+# ==============================================================================
+# Parking Validation
+# ==============================================================================
+
+def calculate_required_parking(
+    units_carpet_above_100: int = 0,
+    units_carpet_upto_100: int = 0,
+    commercial_built_up_sqm: float = 0.0,
+    round_up: bool = False,
+) -> float | int:
+    """Calculate the minimum required car parking spaces.
+
+    Formula:
+        - Residential:
+          - 1 car per unit with carpet area > 100 sq.m
+          - 0.5 car per unit with carpet area <= 100 sq.m
+        - Commercial:
+          - 1 car per 50 sq.m of commercial built-up area
+        - Total: residential + commercial
+
+    Note:
+        By default, returns the exact mathematical value without premature ceiling
+        to prevent inventing unverified rounding rules not in the brief. If caller
+        explicitly requests whole-car rounding, pass round_up=True.
+
+    Args:
+        units_carpet_above_100: Count of residential units with carpet > 100 sq.m.
+        units_carpet_upto_100: Count of residential units with carpet <= 100 sq.m.
+        commercial_built_up_sqm: Total commercial covered area in sq.m.
+        round_up: If True, applies math.ceil. Defaults to False.
+
+    Returns:
+        float | int: Exact number of parking spaces required.
+    """
+    if isinstance(units_carpet_above_100, bool) or not isinstance(units_carpet_above_100, int):
+        raise TypeError("units_carpet_above_100 must be an integer.")
+    if isinstance(units_carpet_upto_100, bool) or not isinstance(units_carpet_upto_100, int):
+        raise TypeError("units_carpet_upto_100 must be an integer.")
+    if isinstance(commercial_built_up_sqm, bool) or not isinstance(commercial_built_up_sqm, (int, float)):
+        raise TypeError("commercial_built_up_sqm must be a number (int or float).")
+
+    if units_carpet_above_100 < 0 or units_carpet_upto_100 < 0:
+        raise ValueError("Unit counts cannot be negative.")
+    if commercial_built_up_sqm < 0:
+        raise ValueError("Commercial built-up area cannot be negative.")
+
+    res_need = (units_carpet_above_100 * 1.0) + (units_carpet_upto_100 * 0.5)
+    comm_need = commercial_built_up_sqm / 50.0 if commercial_built_up_sqm > 0 else 0.0
+    total = res_need + comm_need
+
+    if round_up:
+        return math.ceil(total)
+    if total.is_integer():
+        return int(total)
+    return total
+
+
+def check_parking(
+    parking_proposed: int,
+    units_carpet_above_100: int = 0,
+    units_carpet_upto_100: int = 0,
+    commercial_built_up_sqm: float = 0.0,
+    round_up: bool = False,
+) -> dict:
+    """Validate proposed parking against municipal requirements and shortfall caps.
+
+    Rule ID:
+        PARKING
+
+    Rule:
+        - Shortfall = max(0, required - proposed)
+        - Shortfall percentage = (shortfall / required) * 100
+        - Shortfall <= 20%: ALLOWED (compliant with payment of Rs 200,000/car shortfall fee).
+        - Shortfall > 20%: VIOLATION (non-compliant, cannot proceed).
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    if isinstance(parking_proposed, bool) or not isinstance(parking_proposed, int):
+        raise TypeError("parking_proposed must be an integer.")
+    if parking_proposed < 0:
+        raise ValueError("Proposed parking cannot be negative.")
+
+    required_bays = calculate_required_parking(
+        units_carpet_above_100=units_carpet_above_100,
+        units_carpet_upto_100=units_carpet_upto_100,
+        commercial_built_up_sqm=commercial_built_up_sqm,
+        round_up=round_up,
+    )
+
+    if required_bays == 0:
+        shortfall = 0.0
+        shortfall_pct = 0.0
+        passed = True
+    else:
+        shortfall = max(0.0, float(required_bays) - parking_proposed)
+        shortfall_pct = (shortfall / float(required_bays)) * 100.0
+        # Tolerated up to exactly 20.0% shortfall
+        passed = round(shortfall_pct, 4) <= 20.0
+
+    req_display = f"{int(required_bays)} cars" if isinstance(required_bays, int) or required_bays.is_integer() else f"{required_bays:.2f} cars"
+    shortfall_display = int(shortfall) if shortfall.is_integer() else round(shortfall, 2)
+
+    return {
+        "passed": passed,
+        "rule_id": "PARKING",
+        "check": f"Parking requirement ({req_display} required, max 20% shortfall allowed)",
+        "required": req_display,
+        "proposed": f"{parking_proposed} cars",
+        "compoundable": False,
+        "shortfall": shortfall_display,
+        "shortfall_pct": round(shortfall_pct, 2),
+    }
 

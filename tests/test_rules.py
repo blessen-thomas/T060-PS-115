@@ -6,13 +6,18 @@ import pytest
 from src.data_loader import (
     load_applications,
     load_coverage_table,
+    load_floors,
     load_setback_table,
     load_zones,
 )
 from src.rules import (
+    calculate_extra_height_setback,
+    calculate_required_parking,
     check_all_setbacks,
+    check_building_height,
     check_front_setback,
     check_ground_coverage,
+    check_parking,
     check_rear_setback,
     check_side_setback_1,
     check_side_setback_2,
@@ -48,6 +53,12 @@ def coverage_table():
 def setback_table():
     """Load the official setback table from data/setback_table.csv."""
     return load_setback_table(DATA_DIR / "setback_table.csv")
+
+
+@pytest.fixture
+def floors():
+    """Load the official floors map from data/floors.csv."""
+    return load_floors(DATA_DIR / "floors.csv")
 
 
 # ==============================================================================
@@ -507,4 +518,255 @@ def test_planted_app_0024_equal_road_corner_all_setbacks_pass(applications, setb
 
     rule_ids = [r["rule_id"] for r in all_res]
     assert rule_ids == ["SETBACK_FRONT", "SETBACK_SIDE1", "SETBACK_SIDE2", "SETBACK_REAR"]
+
+
+# ==============================================================================
+# 4. Height & Additional Floor Setback Tests
+# ==============================================================================
+
+def test_check_building_height_road_lt_12m_zone_cap_governs(zones, setback_table):
+    """Road width < 12m in residential zone (ZN-R1): zone cap of 15.00m applies."""
+    # Road 7.5m: front setback 3.0m -> geom = 1.5 * (7.5 + 3.0) = 15.75m.
+    # Zone cap for road < 12m in ZN-R1 is 15.00m. Allowed = min(15.75, 15.00) = 15.00m.
+    res_pass = check_building_height(15.0, 7.5, "ZN-R1", zones, setback_table)
+    assert res_pass["passed"] is True
+    assert res_pass["rule_id"] == "HEIGHT_LIMIT"
+    assert res_pass["required"] == "15.00m"
+    assert res_pass["proposed"] == "15.00m"
+    assert res_pass["compoundable"] is False
+
+    res_fail = check_building_height(15.01, 7.5, "ZN-R1", zones, setback_table)
+    assert res_fail["passed"] is False
+    assert res_fail["required"] == "15.00m"
+
+
+def test_check_building_height_road_ge_12m_zone_cap(zones, setback_table):
+    """Road width >= 12m in residential zone (ZN-R1): zone cap of 24.00m applies."""
+    # Road 12.0m: front setback 4.5m -> geom = 1.5 * (12.0 + 4.5) = 24.75m.
+    # Zone cap for road >= 12m in ZN-R1 is 24.00m. Allowed = min(24.75, 24.00) = 24.00m.
+    res = check_building_height(24.0, 12.0, "ZN-R1", zones, setback_table)
+    assert res["passed"] is True
+    assert res["required"] == "24.00m"
+
+    res_over = check_building_height(24.5, 12.0, "ZN-R1", zones, setback_table)
+    assert res_over["passed"] is False
+
+
+def test_check_building_height_geometric_limit_governs(zones, setback_table):
+    """When geometric road limit is lower than zone cap, geometric limit governs."""
+    # Road 6.0m in commercial zone ZN-C1 (zone cap is 30.00m).
+    # Front setback for 6.0m road is 3.0m -> geom = 1.5 * (6.0 + 3.0) = 13.50m.
+    # Allowed = min(13.50, 30.00) = 13.50m.
+    res = check_building_height(13.5, 6.0, "ZN-C1", zones, setback_table)
+    assert res["passed"] is True
+    assert res["required"] == "13.50m"
+
+    res_fail = check_building_height(14.0, 6.0, "ZN-C1", zones, setback_table)
+    assert res_fail["passed"] is False
+    assert res_fail["required"] == "13.50m"
+
+
+def test_check_building_height_corner_plot_uses_larger_road(zones, setback_table):
+    """Corner plot evaluates height against the larger abutting road."""
+    # Road 1 = 8.0m, Road 2 = 14.0m -> larger road = 14.0m (ge_12 band).
+    # ZN-R2 zone cap for road >= 12m is 24.00m.
+    # Front setback for 14.0m road is 4.5m -> geom = 1.5 * (14.0 + 4.5) = 27.75m.
+    # Allowed = min(27.75, 24.00) = 24.00m.
+    res = check_building_height(
+        proposed_height_m=20.0,
+        road_width_m=8.0,
+        zone_id="ZN-R2",
+        zones=zones,
+        setback_table=setback_table,
+        is_corner_plot=True,
+        second_road_width_m=14.0,
+    )
+    assert res["passed"] is True
+    assert res["required"] == "24.00m"
+
+
+def test_check_building_height_invalid_inputs(zones, setback_table):
+    """Height validation rejects non-numeric, negative, and unknown inputs."""
+    with pytest.raises(ValueError, match="must be greater than zero"):
+        check_building_height(0.0, 10.0, "ZN-R1", zones, setback_table)
+
+    with pytest.raises(ValueError, match="must be greater than zero"):
+        check_building_height(-5.0, 10.0, "ZN-R1", zones, setback_table)
+
+    with pytest.raises(ValueError, match="Unknown zone_id"):
+        check_building_height(10.0, 10.0, "UNKNOWN_ZONE", zones, setback_table)
+
+    with pytest.raises(TypeError, match="must be a number"):
+        check_building_height(True, 10.0, "ZN-R1", zones, setback_table)  # type: ignore
+
+
+def test_calculate_extra_height_setback():
+    """Verify extra setback calculation for floors above an explicit base floor allowance."""
+    assert calculate_extra_height_setback(floors_count=1, base_floor_limit=4) == 0.0
+    assert calculate_extra_height_setback(floors_count=4, base_floor_limit=4) == 0.0
+    assert calculate_extra_height_setback(floors_count=5, base_floor_limit=4) == 0.5
+    assert calculate_extra_height_setback(floors_count=6, base_floor_limit=4) == 1.0
+    assert calculate_extra_height_setback(floors_count=5, base_floor_limit=3) == 1.0
+
+    with pytest.raises(TypeError, match="must be an integer"):
+        calculate_extra_height_setback(4.5, base_floor_limit=4)  # type: ignore
+
+    with pytest.raises(TypeError, match="must be an integer"):
+        calculate_extra_height_setback(5, base_floor_limit="4")  # type: ignore
+
+    with pytest.raises(ValueError, match="cannot be negative"):
+        calculate_extra_height_setback(-1, base_floor_limit=4)
+
+    with pytest.raises(ValueError, match="cannot be negative"):
+        calculate_extra_height_setback(5, base_floor_limit=-1)
+
+
+def test_planted_app_0031_height_violation(applications, zones, setback_table):
+    """Official scenario: APP-0031 height 16.00m on 7.5m road in ZN-R1 exceeds 15.00m cap."""
+    app = next(a for a in applications if a["app_id"] == "APP-0031")
+    assert app["building_height_m"] == 16.0
+    assert app["road_width_m"] == 7.5
+    assert app["zone_id"] == "ZN-R1"
+
+    res = check_building_height(
+        proposed_height_m=app["building_height_m"],
+        road_width_m=app["road_width_m"],
+        zone_id=app["zone_id"],
+        zones=zones,
+        setback_table=setback_table,
+    )
+    assert res["passed"] is False
+    assert res["rule_id"] == "HEIGHT_LIMIT"
+    assert res["required"] == "15.00m"
+    assert res["proposed"] == "16.00m"
+    assert res["compoundable"] is False
+
+
+# ==============================================================================
+# 5. Parking Validation Tests
+# ==============================================================================
+
+def test_calculate_required_parking_residential():
+    """Verify residential parking calculation formula without inventing rounding rules."""
+    # 8 units > 100 (8 x 1.0 = 8) + 4 units <= 100 (4 x 0.5 = 2) -> 10 cars
+    assert calculate_required_parking(units_carpet_above_100=8, units_carpet_upto_100=4) == 10
+
+    # 10 units > 100 (10) + 4 units <= 100 (2) -> 12 cars
+    assert calculate_required_parking(units_carpet_above_100=10, units_carpet_upto_100=4) == 12
+
+    # Odd unit count: 3 units <= 100 (3 x 0.5 = 1.5) -> exact unrounded 1.5 cars
+    assert calculate_required_parking(units_carpet_above_100=0, units_carpet_upto_100=3) == 1.5
+    # If caller explicitly requests ceil rounding:
+    assert calculate_required_parking(units_carpet_above_100=0, units_carpet_upto_100=3, round_up=True) == 2
+
+
+def test_calculate_required_parking_commercial_and_mixed():
+    """Verify commercial and mixed-use parking calculations without inventing rounding rules."""
+    # Commercial: 1000 sq.m / 50 = 20 cars
+    assert calculate_required_parking(commercial_built_up_sqm=1000.0) == 20
+
+    # Fractional commercial: 1039.5 / 50 = exact 20.79 cars (ceil=21 if explicitly requested)
+    assert calculate_required_parking(commercial_built_up_sqm=1039.5) == 20.79
+    assert calculate_required_parking(commercial_built_up_sqm=1039.5, round_up=True) == 21
+
+    # Mixed use: 2 units > 100 (2) + 145.69 sq.m comm (2.9138) = exact 4.9138 cars
+    assert calculate_required_parking(
+        units_carpet_above_100=2,
+        units_carpet_upto_100=0,
+        commercial_built_up_sqm=145.69,
+    ) == pytest.approx(4.9138)
+    assert calculate_required_parking(
+        units_carpet_above_100=2,
+        units_carpet_upto_100=0,
+        commercial_built_up_sqm=145.69,
+        round_up=True,
+    ) == 5
+
+
+def test_check_parking_full_provision_passes():
+    """Proposed parking matching or exceeding required passes with zero shortfall."""
+    res = check_parking(parking_proposed=10, units_carpet_above_100=8, units_carpet_upto_100=4)
+    assert res["passed"] is True
+    assert res["rule_id"] == "PARKING"
+    assert res["required"] == "10 cars"
+    assert res["proposed"] == "10 cars"
+    assert res["shortfall"] == 0
+    assert res["shortfall_pct"] == 0.0
+    assert res["compoundable"] is False
+
+
+def test_check_parking_shortfall_within_20pct_allowed():
+    """Shortfall up to and including 20.0% is allowable."""
+    # 10 required, 8 proposed -> shortfall 2 (20.0%) -> passes
+    res_20 = check_parking(parking_proposed=8, units_carpet_above_100=8, units_carpet_upto_100=4)
+    assert res_20["passed"] is True
+    assert res_20["shortfall"] == 2
+    assert res_20["shortfall_pct"] == 20.0
+
+    # 10 required, 9 proposed -> shortfall 1 (10.0%) -> passes
+    res_10 = check_parking(parking_proposed=9, units_carpet_above_100=8, units_carpet_upto_100=4)
+    assert res_10["passed"] is True
+    assert res_10["shortfall"] == 1
+    assert res_10["shortfall_pct"] == 10.0
+
+
+def test_check_parking_shortfall_exceeding_20pct_fails():
+    """Shortfall exceeding 20.0% is a violation."""
+    # 12 required, 9 proposed -> shortfall 3 (25.0%) -> fails
+    res_25 = check_parking(parking_proposed=9, units_carpet_above_100=10, units_carpet_upto_100=4)
+    assert res_25["passed"] is False
+    assert res_25["shortfall"] == 3
+    assert res_25["shortfall_pct"] == 25.0
+    assert res_25["compoundable"] is False
+
+    # 10 required, 7 proposed -> shortfall 3 (30.0%) -> fails
+    res_30 = check_parking(parking_proposed=7, units_carpet_above_100=8, units_carpet_upto_100=4)
+    assert res_30["passed"] is False
+    assert res_30["shortfall"] == 3
+    assert res_30["shortfall_pct"] == 30.0
+
+
+def test_check_parking_invalid_inputs():
+    """Invalid parking inputs are rejected."""
+    with pytest.raises(ValueError, match="cannot be negative"):
+        check_parking(parking_proposed=-1, units_carpet_above_100=5)
+
+    with pytest.raises(TypeError, match="must be an integer"):
+        check_parking(parking_proposed=True, units_carpet_above_100=5)  # type: ignore
+
+    with pytest.raises(TypeError, match="must be an integer"):
+        check_parking(parking_proposed=10, units_carpet_above_100="5")  # type: ignore
+
+
+def test_planted_app_0017_parking_20pct_shortfall_allowed(applications):
+    """Official EC-05 scenario: APP-0017 parking shortfall at exactly 20% is allowed."""
+    app = next(a for a in applications if a["app_id"] == "APP-0017")
+    res = check_parking(
+        parking_proposed=app["parking_proposed"],
+        units_carpet_above_100=app["units_carpet_above_100"],
+        units_carpet_upto_100=app["units_carpet_upto_100"],
+    )
+    assert res["passed"] is True
+    assert res["rule_id"] == "PARKING"
+    assert res["required"] == "10 cars"
+    assert res["proposed"] == "8 cars"
+    assert res["shortfall"] == 2
+    assert res["shortfall_pct"] == 20.0
+
+
+def test_planted_app_0027_parking_25pct_shortfall_violation(applications):
+    """Official scenario: APP-0027 12 cars required, 9 proposed = 25% shortfall (> 20%)."""
+    app = next(a for a in applications if a["app_id"] == "APP-0027")
+    res = check_parking(
+        parking_proposed=app["parking_proposed"],
+        units_carpet_above_100=app["units_carpet_above_100"],
+        units_carpet_upto_100=app["units_carpet_upto_100"],
+    )
+    assert res["passed"] is False
+    assert res["rule_id"] == "PARKING"
+    assert res["required"] == "12 cars"
+    assert res["proposed"] == "9 cars"
+    assert res["shortfall"] == 3
+    assert res["shortfall_pct"] == 25.0
+    assert res["compoundable"] is False
 
