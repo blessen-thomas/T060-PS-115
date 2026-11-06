@@ -127,3 +127,47 @@ Implement Tasks 1, 2, and 3:
 5. **Testing & Verification**:
    - Created `tests/test_fees.py` with 27 unit and integration tests (total test suite expanded to 135 passing tests).
    - `test_all_27_official_fee_payments_match_exact_rupee` dynamically validates every initial fee payment in `commands.txt` with `diff == 0.0`.
+
+---
+
+## 2026-11-06: Milestone 3 — Statutory Workflow Engine & Lifecycle Tracking
+
+### Objectives
+1. Implement the municipal approval workflow engine (`src/workflow.py`) modeling statutory stage progressions:
+   `SUBMITTED` -> `SCRUTINY` -> `SITE_INSPECTION` -> `TECHNICAL` -> `APPROVED` / `QUERY`
+2. Implement municipal calendar math:
+   - Monday-Friday working days excluding public holidays from `data/holidays.csv`.
+   - Timer starts on the next working day after municipal fee payment.
+   - Deemed approval triggered on the 46th running working day (exceeding 45 working days).
+3. Implement query pauses and lifecycle rules:
+   - Clock stopped during query; 30-calendar-day deadline.
+   - 60-day lapse revival with 25% scrutiny fee.
+   - 6-month commencement deadline, suspension, and Rs 5,000 revalidation.
+   - One-time 1-year approval extension (10% fee) and rejection of second extension.
+4. Execute and verify all 292 commands from `data/commands.txt`.
+
+### Key Planted Scenarios Tested & Verified
+1. **EC-07 Deemed Approval (APP-0001)**:
+   - Fees paid Friday 2026-01-09 -> timer starts Monday 2026-01-12.
+   - Skips Makara Sankranti (Jan 15) and Republic Day (Jan 26).
+   - Clears Scrutiny (Jan 14) and Site Inspection (Feb 13).
+   - Technical never decides -> 45 working days exceeded on Wednesday 2026-03-18 (46th working day) -> `DEEMED_APPROVED`.
+2. **EC-06 Query Clock Resumption (APP-0019)**:
+   - Technical issues Query on 2026-04-23.
+   - Applicant responds on 2026-05-23 (30th calendar day) -> timer resumes; 30 clock-stopped days recorded.
+   - Technical approves on 2026-06-02.
+3. **Query Lapse and One-Time Revival (APP-0023)**:
+   - Query issued 2026-05-05; 30-day response window expires -> lapses on 2026-06-05.
+   - Revived on 2026-06-30 (25 days after lapse, within 60 days) with Rs 2,700 revival fee.
+   - Query answered 2026-07-05, approved 2026-07-10. Second revival attempt rejected.
+4. **Unpaid Fees Timer Gate (APP-0034)**:
+   - Clean application where fees are never paid; timer never starts; no deemed approval.
+5. **Commencement Deadline & Suspension (APP-0008)**:
+   - Approved 2026-02-25; no commencement within 6 months -> suspended on 2026-08-25.
+   - Revalidation fee of Rs 5,000 paid on 2026-09-06 -> revalidated; commencement on 2026-09-08.
+6. **Extension Rules (APP-0011)**:
+   - First extension on 2026-07-30 granted (1 year, 10% fee).
+   - Second extension on 2026-09-08 rejected.
+7. **Testing**:
+   - Added `tests/test_workflow.py` with 12 comprehensive unit and integration tests.
+   - Full test suite expanded to 147 passing tests.
