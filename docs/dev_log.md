@@ -171,3 +171,41 @@ Implement Tasks 1, 2, and 3:
 7. **Testing**:
    - Added `tests/test_workflow.py` with 12 comprehensive unit and integration tests.
    - Full test suite expanded to 147 passing tests.
+
+---
+
+## 2026-11-06: Milestone 4 — Completion Certificate (CC) & Deviation Compounding Engine
+
+### Objectives
+1. Implement the Completion Certificate evaluation and compounding module (`src/cc.py`) adhering to `fee_schedule.csv`, the PS-115 specification, and verified sample data.
+2. Build calculation functions for as-built deviations:
+   - Built-up area deviation slabs:
+     - <= 5.0%: compounded at 2x development charge on excess area.
+     - > 5.0% and <= 10.0%: compounded at 4x development charge on excess area.
+     - > 10.0%: non-compoundable -> `CC_REFUSED`.
+   - Setback deviation:
+     - <= 0.30 m: compounded at Rs 10,000 per metre-side.
+     - > 0.30 m: non-compoundable -> `CC_REFUSED`.
+   - Height deviation:
+     - > 0.0 m: strictly non-compoundable -> `CC_REFUSED`.
+3. Implement `evaluate_cc_request(...)` emitting exact `cc_decisions.csv` schema:
+   `app_id,request_date,deviation_pct,area_compounding_fee,setback_compounding_fee,height_deviation_m,decision`
+4. Implement `process_cc_commands(...)` to process all `CC_REQUEST` commands from `data/commands.txt`.
+
+### Verified Official Planted Cases
+1. **APP-0013 (Height Deviation)**:
+   - As-built height +0.40 m above approved 9.60 m -> `CC_REFUSED` (height is never compoundable).
+2. **APP-0010 (Setback Compounding)**:
+   - 0.30 m deviation on 2 sides -> `CC_ISSUED` with Rs 6,000 compounding fee ($10,000 \times 0.30 \times 2$).
+3. **APP-0009 (5% Built-Up Slab)**:
+   - Approved 273.00, as-built 286.65 (+5.00%) -> `CC_ISSUED` with 2x dev charge ($2 \times 300 \times 13.65 = \text{Rs 8,190.0}$).
+4. **APP-0002 (Clean As-Built)**:
+   - Matches approved -> `CC_ISSUED` with Rs 0 compounding fee.
+5. **APP-0006 (Excess Built-Up > 10%)**:
+   - Approved 609.18, as-built 682.28 (+12.00%) -> `CC_REFUSED` (exceeds 10% ceiling).
+6. **APP-0007 (10% Built-Up Slab)**:
+   - Approved 408.00, as-built 448.80 (+10.00%) -> `CC_ISSUED` with 4x dev charge ($4 \times 400 \times 40.80 = \text{Rs 65,280.0}$).
+
+### Testing
+- Created `tests/test_cc.py` with 11 comprehensive unit and integration tests.
+- Full test suite expanded to 158 passing tests.
