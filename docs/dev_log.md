@@ -231,3 +231,19 @@ Implement Tasks 1, 2, and 3:
   - Correct exclusion of the 10 fatal violation applications from `fee_demand.csv`.
   - Bitwise determinism across consecutive runs.
 - Full automated test suite expanded to 162 passing tests.
+
+---
+
+## 2026-11-06: Milestone 6 — Submission Documentation, Design Document & Final Verification
+
+### Objectives
+1. Author comprehensive system design document (`docs/design_document.md`):
+   - Municipal Domain Glossary with standard town planning definitions.
+   - High-level Architectural Overview & Mermaid UML Class Diagram.
+   - Statutory Workflow State Machine Diagram with stage transition rules.
+   - Complete Business-Rule Register mapping rules to implementation modules and test files.
+   - 19-point Ambiguity and Engineering Decision Log documenting evidence-based resolutions.
+   - 5-Minute Live Demonstration Protocol and Viva Examination Preparation Guide.
+2. Complete `README.md` with end-to-end architecture, quickstart commands, and planted test scenario results table.
+3. Generate and verify all 4 deliverable CSV output files (`validation_report.csv`, `fee_demand.csv`, `workflow.csv`, `cc_decisions.csv`).
+4. Execute full automated test suite (162 tests) and verify git tree integrity.

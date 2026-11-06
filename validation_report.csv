@@ -1,0 +1,41 @@
+app_id,rule_id,check,required,proposed,compoundable
+APP-0001,NONE,No violations,-,-,False
+APP-0002,NONE,No violations,-,-,False
+APP-0003,FAR_CAP,Combined additional FAR cap (Premium + TDR <= 0.60),<= 0.60,0.90,False
+APP-0004,NONE,No violations,-,-,False
+APP-0005,NONE,No violations,-,-,False
+APP-0006,NONE,No violations,-,-,False
+APP-0007,NONE,No violations,-,-,False
+APP-0008,NONE,No violations,-,-,False
+APP-0009,NONE,No violations,-,-,False
+APP-0010,NONE,No violations,-,-,False
+APP-0011,NONE,No violations,-,-,False
+APP-0012,NONE,No violations,-,-,False
+APP-0013,NONE,No violations,-,-,False
+APP-0014,GROUND_COVERAGE,Ground coverage limit for plot area 450.00 sq.m,60.00%,61.11%,False
+APP-0015,SETBACK_FRONT,Front setback for road width 15.00m,4.50m,4.00m,False
+APP-0016,NONE,No violations,-,-,False
+APP-0017,NONE,No violations,-,-,False
+APP-0018,SETBACK_SIDE1,Side setback 1 for plot width 10.50m,1.50m,1.20m,True
+APP-0019,NONE,No violations,-,-,False
+APP-0020,SETBACK_SIDE2,Side setback 2 for corner plot (standard 2.00m + 0.50m second road),2.50m,2.20m,True
+APP-0021,FAR_ACHIEVED,Permitted FAR for road 24.00m,3.35,3.4735,False
+APP-0022,NONE,No violations,-,-,False
+APP-0023,NONE,No violations,-,-,False
+APP-0024,NONE,No violations,-,-,False
+APP-0025,NONE,No violations,-,-,False
+APP-0026,FAR_PREMIUM,Premium FAR road width requirement (>= 12.0m),>= 12.00m,9.00m,False
+APP-0027,PARKING,"Parking requirement (12 cars required, max 20% shortfall allowed)",12 cars,9 cars,False
+APP-0028,NONE,No violations,-,-,False
+APP-0029,SETBACK_REAR,Rear setback for plot width 15.00m,2.00m,1.50m,False
+APP-0030,NONE,No violations,-,-,False
+APP-0031,HEIGHT_LIMIT,Height limit for road 7.50m in zone ZN-R1,15.00m,16.00m,False
+APP-0032,ZONING_USE,Permitted building use in zone ZN-R1,RESIDENTIAL,COMMERCIAL,False
+APP-0033,NONE,No violations,-,-,False
+APP-0034,NONE,No violations,-,-,False
+APP-0035,FAR_ACHIEVED,Permitted FAR for road 10.00m,1.75,1.8790,False
+APP-0036,NONE,No violations,-,-,False
+APP-0037,NONE,No violations,-,-,False
+APP-0038,NONE,No violations,-,-,False
+APP-0039,NONE,No violations,-,-,False
+APP-0040,NONE,No violations,-,-,False
