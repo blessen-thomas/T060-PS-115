@@ -22,9 +22,9 @@ from typing import Any
 
 from src.cc import evaluate_cc_request
 from src.data_loader import load_data_pack
-from src.far import get_base_far
 from src.fees import calculate_fee_demand
 from src.rules import (
+    check_all_far_rules,
     check_all_setbacks,
     check_building_height,
     check_ground_coverage,
@@ -77,63 +77,17 @@ def validate_application(
     balcony_bua = sum(float(f.get("balcony_sqm", 0.0)) for f in floors)
     eligible_bua = total_bua - parking_bua - (0.10 * balcony_bua)
 
-    use_for_far = "mixed_use" if str(app["proposed_use"]).strip().lower() in ("mixed", "mixed_use") else str(app["proposed_use"]).strip().lower()
-    base_far = get_base_far(use_for_far, float(app["road_width_m"]))
-
-    prem_req = float(app.get("premium_far_requested", 0.0))
-    if prem_req > 0.0:
-        if float(app["road_width_m"]) < 12.0:
-            violations.append({
-                "passed": False,
-                "rule_id": "FAR_PREMIUM",
-                "check": "Premium FAR road width requirement (>= 12.0m)",
-                "required": ">= 12.00m",
-                "proposed": f"{float(app['road_width_m']):.2f}m",
-                "compoundable": False,
-            })
-        elif prem_req > 0.50:
-            violations.append({
-                "passed": False,
-                "rule_id": "FAR_PREMIUM",
-                "check": "Premium FAR limit (max 0.50)",
-                "required": "<= 0.50",
-                "proposed": f"{prem_req:.2f}",
-                "compoundable": False,
-            })
-
-    tdr_req = float(app.get("tdr_far_requested", 0.0))
-    if tdr_req > 0.40:
-        violations.append({
-            "passed": False,
-            "rule_id": "FAR_TDR",
-            "check": "TDR FAR limit (max 0.40)",
-            "required": "<= 0.40",
-            "proposed": f"{tdr_req:.2f}",
-            "compoundable": False,
-        })
-
-    if (prem_req + tdr_req) > 0.60:
-        violations.append({
-            "passed": False,
-            "rule_id": "FAR_CAP",
-            "check": "Combined additional FAR cap (Premium + TDR <= 0.60)",
-            "required": "<= 0.60",
-            "proposed": f"{prem_req + tdr_req:.2f}",
-            "compoundable": False,
-        })
-
-    allowed_additional = min(0.60, prem_req + tdr_req) if float(app["road_width_m"]) >= 12.0 or prem_req == 0.0 else min(0.60, tdr_req)
-    total_allowed_far = base_far + allowed_additional
-    far_achieved = eligible_bua / float(app["plot_area_sqm"])
-    if far_achieved > total_allowed_far:
-        violations.append({
-            "passed": False,
-            "rule_id": "FAR_ACHIEVED",
-            "check": f"Permitted FAR for road {float(app['road_width_m']):.2f}m",
-            "required": f"{total_allowed_far:.2f}",
-            "proposed": f"{far_achieved:.4f}",
-            "compoundable": False,
-        })
+    far_checks = check_all_far_rules(
+        plot_area_sqm=float(app["plot_area_sqm"]),
+        road_width_m=float(app["road_width_m"]),
+        proposed_use=app["proposed_use"],
+        eligible_built_up_area=eligible_bua,
+        premium_far_requested=float(app.get("premium_far_requested", 0.0)),
+        tdr_far_requested=float(app.get("tdr_far_requested", 0.0)),
+    )
+    for fc in far_checks:
+        if not fc["passed"]:
+            violations.append(fc)
 
     # 3. Ground Coverage
     cv = check_ground_coverage(float(app["ground_footprint_sqm"]), float(app["plot_area_sqm"]), coverage_table)

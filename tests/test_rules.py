@@ -13,14 +13,19 @@ from src.data_loader import (
 from src.rules import (
     calculate_extra_height_setback,
     calculate_required_parking,
+    check_all_far_rules,
     check_all_setbacks,
     check_building_height,
+    check_combined_far_cap,
+    check_far_achieved,
     check_front_setback,
     check_ground_coverage,
     check_parking,
+    check_premium_far,
     check_rear_setback,
     check_side_setback_1,
     check_side_setback_2,
+    check_tdr_far,
     check_zoning_use,
 )
 
@@ -123,7 +128,227 @@ def test_check_zoning_use_app_0032_planted_case(zones, applications):
 
 
 # ==============================================================================
-# 2. Ground Coverage Validation Tests (GROUND_COVERAGE)
+# 2. Floor Area Ratio (FAR) Validation Tests (Precedence 2)
+# ==============================================================================
+
+def test_check_premium_far_rules():
+    """Verify premium FAR road width threshold (>= 12m) and max limit (<= 0.50)."""
+    # 0.0 premium requested -> passes
+    assert check_premium_far(0.0, 9.0)["passed"] is True
+
+    # 0.25 on 15m road -> passes
+    res = check_premium_far(0.25, 15.0)
+    assert res["passed"] is True
+    assert res["rule_id"] == "FAR_PREMIUM"
+
+    # 0.25 on 9m road (< 12m) -> fails
+    res_narrow = check_premium_far(0.25, 9.0)
+    assert res_narrow["passed"] is False
+    assert res_narrow["rule_id"] == "FAR_PREMIUM"
+    assert res_narrow["required"] == ">= 12.00m"
+    assert res_narrow["proposed"] == "9.00m"
+
+    # 0.60 on 15m road (> 0.50) -> fails
+    res_excess = check_premium_far(0.60, 15.0)
+    assert res_excess["passed"] is False
+    assert res_excess["rule_id"] == "FAR_PREMIUM"
+    assert res_excess["required"] == "<= 0.50"
+
+
+def test_check_tdr_far_rules():
+    """Verify TDR FAR limit (max 0.40)."""
+    assert check_tdr_far(0.0)["passed"] is True
+    assert check_tdr_far(0.40)["passed"] is True
+    res_excess = check_tdr_far(0.45)
+    assert res_excess["passed"] is False
+    assert res_excess["rule_id"] == "FAR_TDR"
+    assert res_excess["required"] == "<= 0.40"
+    assert res_excess["proposed"] == "0.45"
+
+
+def test_check_combined_far_cap_rules():
+    """Verify combined additional FAR (Premium + TDR) cap (<= 0.60)."""
+    assert check_combined_far_cap(0.30, 0.30)["passed"] is True
+    assert check_combined_far_cap(0.50, 0.10)["passed"] is True
+
+    # 0.50 + 0.40 = 0.90 -> exceeds 0.60 cap by 0.30
+    res = check_combined_far_cap(0.50, 0.40)
+    assert res["passed"] is False
+    assert res["rule_id"] == "FAR_CAP"
+    assert res["required"] == "<= 0.60"
+    assert res["proposed"] == "0.90"
+
+
+def test_check_far_achieved_direct():
+    """Verify achieved FAR comparison against permitted threshold."""
+    # Plot 100, built 200, allowed 2.50 -> 2.00 <= 2.50 passes
+    res_pass = check_far_achieved(100.0, 200.0, 2.50, 15.0)
+    assert res_pass["passed"] is True
+    assert res_pass["rule_id"] == "FAR_ACHIEVED"
+
+    # Plot 100, built 260, allowed 2.50 -> 2.60 > 2.50 fails
+    res_fail = check_far_achieved(100.0, 260.0, 2.50, 15.0)
+    assert res_fail["passed"] is False
+    assert res_fail["rule_id"] == "FAR_ACHIEVED"
+    assert res_fail["required"] == "2.50"
+    assert res_fail["proposed"] == "2.6000"
+
+
+def test_planted_app_0021_far_achieved_violation(applications, floors):
+    """Verify planted edge case APP-0021:
+    Commercial on 24.0m road (base FAR 2.75).
+    Premium FAR 0.50 + TDR 0.10 used -> Permitted FAR = 2.75 + 0.60 = 3.35.
+    Floors: 9 commercial floors of 208.41 sqm = 1,875.69 sqm (B1 parking excluded).
+    Plot area: 540.00 sqm.
+    Achieved FAR: 1,875.69 / 540.00 = 3.4735.
+    Must be flagged with rule_id='FAR_ACHIEVED', required='3.35', proposed='3.4735', compoundable=False.
+    """
+    app = next(a for a in applications if a["app_id"] == "APP-0021")
+    app_floors = floors.get("APP-0021", [])
+
+    total_bua = sum(float(f["built_up_sqm"]) for f in app_floors)
+    parking_bua = sum(float(f["built_up_sqm"]) for f in app_floors if str(f.get("floor_use", "")).strip().upper() == "PARKING")
+    balcony_bua = sum(float(f.get("balcony_sqm", 0.0)) for f in app_floors)
+    eligible_bua = total_bua - parking_bua - (0.10 * balcony_bua)
+
+    assert eligible_bua == pytest.approx(1875.69, abs=0.01)
+
+    checks = check_all_far_rules(
+        plot_area_sqm=float(app["plot_area_sqm"]),
+        road_width_m=float(app["road_width_m"]),
+        proposed_use=app["proposed_use"],
+        eligible_built_up_area=eligible_bua,
+        premium_far_requested=float(app.get("premium_far_requested", 0.0)),
+        tdr_far_requested=float(app.get("tdr_far_requested", 0.0)),
+    )
+
+    violations = [c for c in checks if not c["passed"]]
+    assert len(violations) == 1
+
+    viol = violations[0]
+    assert viol["rule_id"] == "FAR_ACHIEVED"
+    assert viol["check"] == "Permitted FAR for road 24.00m"
+    assert viol["required"] == "3.35"
+    assert viol["proposed"] == "3.4735"
+    assert viol["compoundable"] is False
+
+
+def test_planted_app_0003_far_cap_violation(applications, floors):
+    """Verify planted edge case APP-0003:
+    Premium FAR 0.50 + TDR 0.40 = 0.90 exceeds combined cap of 0.60.
+    Must be flagged with rule_id='FAR_CAP', required='<= 0.60', proposed='0.90'.
+    """
+    app = next(a for a in applications if a["app_id"] == "APP-0003")
+    app_floors = floors.get("APP-0003", [])
+
+    total_bua = sum(float(f["built_up_sqm"]) for f in app_floors)
+    parking_bua = sum(float(f["built_up_sqm"]) for f in app_floors if str(f.get("floor_use", "")).strip().upper() == "PARKING")
+    balcony_bua = sum(float(f.get("balcony_sqm", 0.0)) for f in app_floors)
+    eligible_bua = total_bua - parking_bua - (0.10 * balcony_bua)
+
+    checks = check_all_far_rules(
+        plot_area_sqm=float(app["plot_area_sqm"]),
+        road_width_m=float(app["road_width_m"]),
+        proposed_use=app["proposed_use"],
+        eligible_built_up_area=eligible_bua,
+        premium_far_requested=float(app.get("premium_far_requested", 0.0)),
+        tdr_far_requested=float(app.get("tdr_far_requested", 0.0)),
+    )
+
+    violations = [c for c in checks if not c["passed"]]
+    assert len(violations) == 1
+    assert violations[0]["rule_id"] == "FAR_CAP"
+    assert violations[0]["required"] == "<= 0.60"
+    assert violations[0]["proposed"] == "0.90"
+    assert violations[0]["compoundable"] is False
+
+
+def test_planted_app_0026_premium_road_width_violation(applications, floors):
+    """Verify planted edge case APP-0026:
+    Premium FAR requested (0.25) on a 9.00m road (< 12.0m).
+    Must be flagged with rule_id='FAR_PREMIUM', required='>= 12.00m', proposed='9.00m'.
+    """
+    app = next(a for a in applications if a["app_id"] == "APP-0026")
+    app_floors = floors.get("APP-0026", [])
+
+    total_bua = sum(float(f["built_up_sqm"]) for f in app_floors)
+    parking_bua = sum(float(f["built_up_sqm"]) for f in app_floors if str(f.get("floor_use", "")).strip().upper() == "PARKING")
+    balcony_bua = sum(float(f.get("balcony_sqm", 0.0)) for f in app_floors)
+    eligible_bua = total_bua - parking_bua - (0.10 * balcony_bua)
+
+    checks = check_all_far_rules(
+        plot_area_sqm=float(app["plot_area_sqm"]),
+        road_width_m=float(app["road_width_m"]),
+        proposed_use=app["proposed_use"],
+        eligible_built_up_area=eligible_bua,
+        premium_far_requested=float(app.get("premium_far_requested", 0.0)),
+        tdr_far_requested=float(app.get("tdr_far_requested", 0.0)),
+    )
+
+    violations = [c for c in checks if not c["passed"]]
+    assert len(violations) == 1
+    assert violations[0]["rule_id"] == "FAR_PREMIUM"
+    assert violations[0]["required"] == ">= 12.00m"
+    assert violations[0]["proposed"] == "9.00m"
+    assert violations[0]["compoundable"] is False
+
+
+def test_planted_app_0035_far_achieved_violation(applications, floors):
+    """Verify planted edge case APP-0035:
+    Residential on 10.0m road (base FAR 1.75, no premium requested).
+    Achieved FAR 1.8790 > 1.75.
+    Must be flagged with rule_id='FAR_ACHIEVED', required='1.75', proposed='1.8790'.
+    """
+    app = next(a for a in applications if a["app_id"] == "APP-0035")
+    app_floors = floors.get("APP-0035", [])
+
+    total_bua = sum(float(f["built_up_sqm"]) for f in app_floors)
+    parking_bua = sum(float(f["built_up_sqm"]) for f in app_floors if str(f.get("floor_use", "")).strip().upper() == "PARKING")
+    balcony_bua = sum(float(f.get("balcony_sqm", 0.0)) for f in app_floors)
+    eligible_bua = total_bua - parking_bua - (0.10 * balcony_bua)
+
+    checks = check_all_far_rules(
+        plot_area_sqm=float(app["plot_area_sqm"]),
+        road_width_m=float(app["road_width_m"]),
+        proposed_use=app["proposed_use"],
+        eligible_built_up_area=eligible_bua,
+        premium_far_requested=float(app.get("premium_far_requested", 0.0)),
+        tdr_far_requested=float(app.get("tdr_far_requested", 0.0)),
+    )
+
+    violations = [c for c in checks if not c["passed"]]
+    assert len(violations) == 1
+    assert violations[0]["rule_id"] == "FAR_ACHIEVED"
+    assert violations[0]["required"] == "1.75"
+    assert violations[0]["proposed"] == "1.8790"
+    assert violations[0]["compoundable"] is False
+
+
+def test_far_clean_app_0001(applications, floors):
+    """Verify clean application APP-0001 passes all FAR checks."""
+    app = next(a for a in applications if a["app_id"] == "APP-0001")
+    app_floors = floors.get("APP-0001", [])
+
+    total_bua = sum(float(f["built_up_sqm"]) for f in app_floors)
+    parking_bua = sum(float(f["built_up_sqm"]) for f in app_floors if str(f.get("floor_use", "")).strip().upper() == "PARKING")
+    balcony_bua = sum(float(f.get("balcony_sqm", 0.0)) for f in app_floors)
+    eligible_bua = total_bua - parking_bua - (0.10 * balcony_bua)
+
+    checks = check_all_far_rules(
+        plot_area_sqm=float(app["plot_area_sqm"]),
+        road_width_m=float(app["road_width_m"]),
+        proposed_use=app["proposed_use"],
+        eligible_built_up_area=eligible_bua,
+        premium_far_requested=float(app.get("premium_far_requested", 0.0)),
+        tdr_far_requested=float(app.get("tdr_far_requested", 0.0)),
+    )
+
+    violations = [c for c in checks if not c["passed"]]
+    assert len(violations) == 0
+
+
+# ==============================================================================
+# 3. Ground Coverage Validation Tests (GROUND_COVERAGE)
 # ==============================================================================
 
 def test_check_ground_coverage_passes(coverage_table):

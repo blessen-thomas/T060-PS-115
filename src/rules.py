@@ -15,6 +15,21 @@ from __future__ import annotations
 import math
 
 from src.data_loader import lookup_max_coverage, lookup_setback
+from src.far import get_base_far
+
+
+def _validate_numeric(val: any, field_name: str, allow_zero: bool = True) -> float:
+    """Validate that value is a real number and conforms to positivity constraints."""
+    if isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise TypeError(f"{field_name} must be a number (int or float).")
+    num = float(val)
+    if allow_zero:
+        if num < 0:
+            raise ValueError(f"{field_name} cannot be negative.")
+    else:
+        if num <= 0:
+            raise ValueError(f"{field_name} must be greater than zero.")
+    return num
 
 
 def check_zoning_use(
@@ -76,6 +91,235 @@ def check_zoning_use(
         "proposed": clean_use,
         "compoundable": False,
     }
+
+
+# ==============================================================================
+# Floor Area Ratio (FAR) Statutory Validation Checkers (Precedence 2)
+# ==============================================================================
+
+def check_premium_far(
+    premium_far_requested: float,
+    road_width_m: float,
+) -> dict:
+    """Validate requested premium FAR against road width and statutory limits.
+
+    Rule ID:
+        FAR_PREMIUM
+
+    Precedence:
+        Follows FAR_BASE in municipal evaluation precedence.
+
+    Rules:
+        - Premium FAR requires abutting road width >= 12.0m.
+        - Premium FAR cannot exceed 0.50.
+
+    Args:
+        premium_far_requested: Additional premium FAR requested.
+        road_width_m: Abutting road width in metres.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prem_req = _validate_numeric(premium_far_requested, "premium_far_requested", allow_zero=True)
+    width = _validate_numeric(road_width_m, "road_width_m", allow_zero=False)
+
+    if prem_req <= 0.0:
+        return {
+            "passed": True,
+            "rule_id": "FAR_PREMIUM",
+            "check": "Premium FAR limit (max 0.50)",
+            "required": "<= 0.50",
+            "proposed": f"{prem_req:.2f}",
+            "compoundable": False,
+        }
+
+    if width < 12.0:
+        return {
+            "passed": False,
+            "rule_id": "FAR_PREMIUM",
+            "check": "Premium FAR road width requirement (>= 12.0m)",
+            "required": ">= 12.00m",
+            "proposed": f"{width:.2f}m",
+            "compoundable": False,
+        }
+
+    if prem_req > 0.50:
+        return {
+            "passed": False,
+            "rule_id": "FAR_PREMIUM",
+            "check": "Premium FAR limit (max 0.50)",
+            "required": "<= 0.50",
+            "proposed": f"{prem_req:.2f}",
+            "compoundable": False,
+        }
+
+    return {
+        "passed": True,
+        "rule_id": "FAR_PREMIUM",
+        "check": "Premium FAR limit (max 0.50)",
+        "required": "<= 0.50",
+        "proposed": f"{prem_req:.2f}",
+        "compoundable": False,
+    }
+
+
+def check_tdr_far(tdr_far_requested: float) -> dict:
+    """Validate requested TDR FAR against statutory maximum limit (0.40).
+
+    Rule ID:
+        FAR_TDR
+
+    Precedence:
+        Follows FAR_PREMIUM in municipal evaluation precedence.
+
+    Args:
+        tdr_far_requested: Additional TDR FAR requested.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    tdr_req = _validate_numeric(tdr_far_requested, "tdr_far_requested", allow_zero=True)
+    passed = tdr_req <= 0.40
+    return {
+        "passed": passed,
+        "rule_id": "FAR_TDR",
+        "check": "TDR FAR limit (max 0.40)",
+        "required": "<= 0.40",
+        "proposed": f"{tdr_req:.2f}",
+        "compoundable": False,
+    }
+
+
+def check_combined_far_cap(
+    premium_far_requested: float,
+    tdr_far_requested: float,
+) -> dict:
+    """Validate combined additional FAR (Premium + TDR) against statutory cap of 0.60.
+
+    Rule ID:
+        FAR_CAP
+
+    Precedence:
+        Follows FAR_TDR in municipal evaluation precedence.
+
+    Args:
+        premium_far_requested: Additional premium FAR requested.
+        tdr_far_requested: Additional TDR FAR requested.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    prem_req = _validate_numeric(premium_far_requested, "premium_far_requested", allow_zero=True)
+    tdr_req = _validate_numeric(tdr_far_requested, "tdr_far_requested", allow_zero=True)
+    combined = prem_req + tdr_req
+    passed = combined <= 0.60
+    return {
+        "passed": passed,
+        "rule_id": "FAR_CAP",
+        "check": "Combined additional FAR cap (Premium + TDR <= 0.60)",
+        "required": "<= 0.60",
+        "proposed": f"{combined:.2f}",
+        "compoundable": False,
+    }
+
+
+def check_far_achieved(
+    plot_area_sqm: float,
+    eligible_built_up_area: float,
+    allowed_far: float,
+    road_width_m: float,
+) -> dict:
+    """Validate whether the proposed built-up area complies with total permitted FAR.
+
+    Rule ID:
+        FAR_ACHIEVED
+
+    Precedence:
+        Follows FAR_CAP in municipal evaluation precedence.
+
+    Args:
+        plot_area_sqm: Site/plot area in sq.m.
+        eligible_built_up_area: Eligible built-up area after exclusions.
+        allowed_far: Total permitted FAR (Base + allowed additional).
+        road_width_m: Abutting road width in metres.
+
+    Returns:
+        dict: Standard validation report dictionary.
+    """
+    plot_area = _validate_numeric(plot_area_sqm, "plot_area_sqm", allow_zero=False)
+    eligible_bua = _validate_numeric(eligible_built_up_area, "eligible_built_up_area", allow_zero=True)
+    allowed = _validate_numeric(allowed_far, "allowed_far", allow_zero=False)
+    width = _validate_numeric(road_width_m, "road_width_m", allow_zero=False)
+
+    far_achieved = eligible_bua / plot_area
+    passed = far_achieved <= allowed
+
+    return {
+        "passed": passed,
+        "rule_id": "FAR_ACHIEVED",
+        "check": f"Permitted FAR for road {width:.2f}m",
+        "required": f"{allowed:.2f}",
+        "proposed": f"{far_achieved:.4f}",
+        "compoundable": False,
+    }
+
+
+def check_all_far_rules(
+    plot_area_sqm: float,
+    road_width_m: float,
+    proposed_use: str,
+    eligible_built_up_area: float,
+    premium_far_requested: float = 0.0,
+    tdr_far_requested: float = 0.0,
+) -> list[dict]:
+    """Validate all statutory FAR rules in precedence order:
+    1. FAR_PREMIUM (if premium FAR requested)
+    2. FAR_TDR (if TDR FAR requested)
+    3. FAR_CAP (if additional FAR requested)
+    4. FAR_ACHIEVED (always evaluated)
+
+    Args:
+        plot_area_sqm: Plot area in square metres.
+        road_width_m: Abutting road width in metres.
+        proposed_use: Use category ('RESIDENTIAL', 'COMMERCIAL', 'MIXED').
+        eligible_built_up_area: Eligible built-up area after deductions.
+        premium_far_requested: Additional premium FAR requested.
+        tdr_far_requested: Additional TDR FAR requested.
+
+    Returns:
+        list[dict]: List of rule check result dictionaries.
+    """
+    use_for_far = "mixed_use" if str(proposed_use).strip().lower() in ("mixed", "mixed_use") else str(proposed_use).strip().lower()
+    base_far = get_base_far(use_for_far, float(road_width_m))
+
+    prem_req = float(premium_far_requested or 0.0)
+    tdr_req = float(tdr_far_requested or 0.0)
+    road_width = float(road_width_m)
+    plot_area = float(plot_area_sqm)
+    eligible_bua = float(eligible_built_up_area)
+
+    checks: list[dict] = []
+
+    if prem_req > 0.0:
+        checks.append(check_premium_far(prem_req, road_width))
+
+    if tdr_req > 0.0:
+        checks.append(check_tdr_far(tdr_req))
+
+    if prem_req > 0.0 or tdr_req > 0.0:
+        checks.append(check_combined_far_cap(prem_req, tdr_req))
+
+    allowed_additional = min(0.60, prem_req + tdr_req) if road_width >= 12.0 or prem_req == 0.0 else min(0.60, tdr_req)
+    total_allowed_far = base_far + allowed_additional
+
+    checks.append(check_far_achieved(
+        plot_area_sqm=plot_area,
+        eligible_built_up_area=eligible_bua,
+        allowed_far=total_allowed_far,
+        road_width_m=road_width,
+    ))
+
+    return checks
 
 
 def check_ground_coverage(
@@ -144,20 +388,6 @@ def check_ground_coverage(
 # ==============================================================================
 # Helper Functions for Setback Validation
 # ==============================================================================
-
-def _validate_numeric(val: any, field_name: str, allow_zero: bool = True) -> float:
-    """Validate that value is a real number and conforms to positivity constraints."""
-    if isinstance(val, bool) or not isinstance(val, (int, float)):
-        raise TypeError(f"{field_name} must be a number (int or float).")
-    num = float(val)
-    if allow_zero:
-        if num < 0:
-            raise ValueError(f"{field_name} cannot be negative.")
-    else:
-        if num <= 0:
-            raise ValueError(f"{field_name} must be greater than zero.")
-    return num
-
 
 def _evaluate_setback(
     rule_id: str,
