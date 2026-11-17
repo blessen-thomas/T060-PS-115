@@ -145,6 +145,6 @@ When executed, the pipeline exports the 4 mandatory municipal reports:
 
 ## 6. Documentation & Viva Readiness
 
-Detailed engineering design documentation, Mermaid UML class and state diagrams, a complete decision log, and oral examination defense Q&A are available in:
+Detailed engineering design documentation, Mermaid UML class and state diagrams, a complete decision log, and oral examination defense Q&A are available in;
 - [`docs/design_document.md`](docs/design_document.md)
 - [`docs/dev_log.md`](docs/dev_log.md)
