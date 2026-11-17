@@ -1,27 +1,34 @@
 # Municipal Building-Plan Approval Fee and FAR Compliance Engine
 
-**Capstone Project**: Team T060
-**Problem Statement**: PS-115
-**Team Members**: Bheemesh V (1AT24CG016), Blessen Thomas (1AT24CG017)
-**Repository**: [https://github.com/blessen-thomas/T060-PS-115](https://github.com/blessen-thomas/T060-PS-115)
-**Technology**: Python 3.10+, `pytest`, Standard Library, Command-Line Interface (CLI)
+- **Capstone Project:** Team T060
+- **Problem Statement:** PS-115
+- **Team Members:** Bheemesh V (1AT24CG016), Blessen Thomas (1AT24CG017)
+- **Repository:** [https://github.com/blessen-thomas/T060-PS-115](https://github.com/blessen-thomas/T060-PS-115)
 
 ---
 
 ## 1. Project Overview
 
-The **T060-PS-115 Compliance Engine** is a comprehensive, production-grade municipal automation system that processes building-plan sanction applications according to statutory town planning regulations.
+The **T060-PS-115 Compliance Engine** is a robust, file-driven municipal automation system designed for Urban Local Bodies (ULBs) and planning authorities. It validates building-plan sanction proposals against statutory town-planning regulations, computes itemized municipal fee demands, manages the statutory approval lifecycle, and evaluates as-built completion certificate (CC) deviations.
 
-The engine automates the full municipal plan lifecycle:
-1. **Plan Validation**: Multi-rule compliance verification in statutory precedence order (Zoning $\rightarrow$ FAR $\rightarrow$ Coverage $\rightarrow$ Setbacks $\rightarrow$ Height $\rightarrow$ Parking).
-2. **Fee Demand Estimation**: Calculation of scrutiny fees, development charges, premium FAR fees, betterment levies, labour cess, and parking shortfall penalties.
-3. **Statutory Workflow Management**: Stage progression tracking (`SCRUTINY` $\rightarrow$ `SITE_INSPECTION` $\rightarrow$ `TECHNICAL`), working-day calendars, holiday exclusions, query clock stops, lapses, revivals, and 46th-day deemed approvals.
-4. **Completion Certificate (CC) Assessment**: As-built deviation evaluation, compounding fee calculation for excess area ($\le 10\%$) and setbacks ($\le 0.30\text{ m}$), and strict refusal for height overages.
-5. **Command Pipeline Execution**: Sequential execution of all 292 commands from `commands.txt` and deterministic generation of the 4 mandatory output CSV files.
+### Main Features
+- **Plan Validation**: Multi-rule compliance verification in strict statutory precedence order (`ZONING_USE` $\rightarrow$ `FAR` $\rightarrow$ `GROUND_COVERAGE` $\rightarrow$ `SETBACKS` $\rightarrow$ `HEIGHT_LIMIT` $\rightarrow$ `PARKING`).
+- **Fee Demand Estimation**: Exact computation of scrutiny fees (with a ₹2,000 statutory minimum), development charges, premium FAR fees, agricultural betterment levies, labour welfare cess, and parking shortfall penalties, with component-wise ceiling rounding up to the nearest ₹10.
+- **Statutory Workflow Management**: Full lifecycle tracking across `SCRUTINY` (7 days), `SITE_INSPECTION` (10 days), and `TECHNICAL` (15 days), featuring working-day calendar math (excluding weekends and gazetted public holidays), query clock pauses, lapse and revival tracking, and automatic 46th working day deemed approvals.
+- **Completion Certificate (CC) Assessment**: As-built deviation evaluation supporting area compounding (2× development charge for $\le 5\%$, 4× for $5\text{--}10\%$, refusal $> 10\%$), setback compounding (₹10,000 per metre-side for $\le 0.30\text{ m}$), and strict refusal for any positive height overage ($> 0.0\text{ m}$).
+- **Batch Command Pipeline**: Sequential, deterministic execution of all 292 lifecycle commands from `commands.txt` generating four standardized output CSV reports.
 
 ---
 
-## 2. Architecture & Codebase Layout
+## 2. Technology Stack
+
+- **Language**: Python 3.10+ (Standard Library: `csv`, `datetime`, `math`, `argparse`, `pathlib`)
+- **Testing Framework**: `pytest` (v8.0.0+)
+- **Operating Environment**: Windows PowerShell / POSIX Shell
+
+---
+
+## 3. Project Structure
 
 ```text
 T060-PS-115/
@@ -35,116 +42,138 @@ T060-PS-115/
 │   ├── holidays.csv            # 2026 public holiday calendar for working-day clock
 │   ├── setback_table.csv       # Setback requirements by road width & plot width
 │   └── zones.csv               # Municipal zones, permitted uses, & height caps
-├── docs/                       # Comprehensive documentation & viva guides
-│   ├── design_document.md      # Full design document, diagrams, glossary, viva Q&A
-│   └── dev_log.md              # Milestone-by-milestone development & decision log
+├── docs/                       # Project documentation
+│   ├── decision_log.md         # Technical and architectural decision log
+│   └── demo_video.md           # Demonstration video link and contents outline
 ├── src/                        # Modular application source code
 │   ├── __init__.py             # Package marker
-│   ├── data_loader.py          # CSV loading and strict interval lookup logic
+│   ├── data_loader.py          # CSV loading and strict interval lookup utilities
 │   ├── far.py                  # Core FAR calculation, deductions, and caps
 │   ├── rules.py                # Zoning, coverage, setbacks, height, & parking rules
 │   ├── fees.py                 # Municipal fee engine and demand calculation
 │   ├── workflow.py             # Calendar math, stage tracker, and deemed approval
 │   ├── cc.py                   # Completion certificate & deviation compounding
 │   ├── runner.py               # End-to-end command runner & 4-CSV exporter
-│   └── cli.py                  # Interactive CLI for plan checking
-├── tests/                      # Automated test suite (162 tests)
+│   └── cli.py                  # Interactive CLI for single-plan verification
+├── tests/                      # Automated test suite (171 tests)
 │   ├── test_data_loader.py     # CSV parsing and interval boundary tests (17 tests)
 │   ├── test_far.py             # FAR calculations, caps, and road bands (48 tests)
-│   ├── test_rules.py           # Individual validation rules & edge cases (43 tests)
+│   ├── test_rules.py           # Regulatory validation rules & edge cases (52 tests)
 │   ├── test_fees.py            # Fee components & 27-payment verification (27 tests)
 │   ├── test_workflow.py        # Calendar math, query stops, & deemed approvals (12 tests)
 │   ├── test_cc.py              # As-built deviation slabs & compounding (11 tests)
 │   └── test_runner.py          # Full pipeline execution & determinism (4 tests)
-├── PS-115_PROJECT_CONTEXT.md   # Persistent project instructions & rules
-├── requirements.txt            # Testing dependencies (pytest)
+├── cc_decisions.csv            # Generated completion certificate decision report (6 rows)
+├── fee_demand.csv              # Generated fee demand breakdown report (30 rows)
+├── validation_report.csv       # Generated plan validation report (40 rows)
+├── workflow.csv                # Generated lifecycle transition audit log (76 rows)
+├── PS-115_PROJECT_CONTEXT.md   # Official problem statement context & business rules
+├── requirements.txt            # Test suite dependencies (pytest)
 └── README.md                   # Project documentation & run guide
 ```
 
 ---
 
-## 3. Quickstart & Execution Guide
+## 4. Prerequisites
 
-### Prerequisites
-- Python 3.10 or higher installed.
-- Virtual environment (recommended).
+Before setting up the project, ensure you have:
+- **Python**: Version 3.10 or higher installed (`python --version`).
+- **pip**: Python package installer (`pip --version`).
+- **Git**: Version control tool (`git --version`).
+- **Shell**: Windows PowerShell (or standard Bash on Linux/macOS).
 
-### Installation
-```bash
+---
+
+## 5. Installation and Setup
+
+Follow these copy-paste-ready commands in Windows PowerShell:
+
+```powershell
+# 1. Clone the repository
 git clone https://github.com/blessen-thomas/T060-PS-115.git
+
+# 2. Navigate into the project root directory
 cd T060-PS-115
+
+# 3. Create a Python virtual environment (.venv)
+python -m venv .venv
+
+# 4. Activate the virtual environment
+.\.venv\Scripts\Activate.ps1
+
+# 5. Install dependencies from requirements.txt
 pip install -r requirements.txt
 ```
 
-### Running the Full Test Suite
-To run all 162 automated tests with verbose output:
-```bash
-python -m pytest -v
-```
+---
 
-### Running the End-to-End Command Pipeline
-To process all 292 commands from `data/commands.txt` and generate all 4 output CSV files in the project root:
-```bash
+## 6. Running the Application
+
+### End-to-End Command Pipeline
+To process all 292 lifecycle commands from `data/commands.txt` and generate all four municipal CSV reports in the project root:
+
+```powershell
 python -m src.runner data/commands.txt --data-dir data --output-dir .
 ```
 
-### Running the Interactive CLI
-For manual single-application FAR and fee compliance verification:
-```bash
+**What this command does:**
+1. Loads all municipal regulations, holiday calendars, 40 applications, and 178 floor records from `--data-dir data`.
+2. Validates every application in statutory precedence order and determines compliance.
+3. Generates itemized fee demands for compliant applications (excluding non-compoundable plans).
+4. Processes all 292 sequential commands strictly in file order, tracking workflow stages, working days, calendar query halts, lapses, revivals, deemed approvals, commencement notices, extensions, and completion certificates.
+5. Exports the four official output CSV files directly into `--output-dir .`.
+
+### Interactive Single-Plan CLI
+For interactive plan checking and manual FAR/fee calculations:
+
+```powershell
 python src/cli.py
 ```
 
 ---
 
-## 4. Generated Output CSV Files
+## 7. Running Tests
 
-When executed, the pipeline exports the 4 mandatory municipal reports:
+To execute the complete automated test suite of 171 tests with verbose reporting:
 
-| Output File | Target Rows | Description & Key Invariants |
+```powershell
+python -m pytest -v
+```
+
+All 171 test cases run in approximately 0.25 seconds with 100% pass rate, verifying:
+- CSV loading, interval parsing, and data integrity (17 tests).
+- FAR base calculations, exclusions, premium bounds, and road width bands (48 tests).
+- Zoning, ground coverage, setback boundaries, corner plots, height limits, parking deficits, and modular FAR rules (52 tests).
+- Fee formulas, minimum scrutiny fees, rounding rules, and 27 official payment receipts (27 tests).
+- Working days, holiday skipping, 30-day query stops, 60-day revivals, and 46th-day deemed approvals (12 tests).
+- Completion certificate deviation slabs, setback compounding, and height refusals (11 tests).
+- End-to-end command runner order, CSV schemas, and pipeline determinism (4 tests).
+
+---
+
+## 8. Output Files
+
+The pipeline generates four deliverable CSV files:
+
+| Output File | Rows | Description & Key Invariants |
 |---|:---:|---|
 | **`validation_report.csv`** | **40** | One row per application; lists violations in statutory precedence order (`ZONING_USE` $\rightarrow$ `FAR` $\rightarrow$ `GROUND_COVERAGE` $\rightarrow$ `SETBACKS` $\rightarrow$ `HEIGHT_LIMIT` $\rightarrow$ `PARKING`); compliant applications emit a `NONE` row. |
-| **`fee_demand.csv`** | **30** | Fee demand breakdown for applications with no non-compoundable violations; 10 fatal applications are strictly excluded. |
-| **`workflow.csv`** | **76** | Chronological log of all stage transitions (`SCRUTINY`, `SITE_INSPECTION`, `TECHNICAL`), working days, query clock pauses, lapses, revivals, and deemed approvals. |
+| **`fee_demand.csv`** | **30** | Itemized fee breakdown for applications with no non-compoundable violations; strictly excludes the 10 unapprovable applications. |
+| **`workflow.csv`** | **76** | Chronological log of all stage transitions (`SCRUTINY`, `SITE_INSPECTION`, `TECHNICAL`), working days elapsed, query clock pauses, lapses, revivals, and deemed approvals. |
 | **`cc_decisions.csv`** | **6** | Completion certificate decisions for all 6 `CC_REQUEST` records (4 `CC_ISSUED`, 2 `CC_REFUSED`). |
 
 ---
 
-## 5. Verified Planted Scenarios
+## 9. Documentation and Demonstration
 
-| Application | Statutory Rule & Scenario | Expected Outcome | Test Status |
-|---|---|---|:---:|
-| **APP-0001** | Fee paid Jan 09; skips Jan 15 & Jan 26 holidays; Technical never decides | `DEEMED_APPROVED` on 46th working day (2026-03-18) | Verified |
-| **APP-0002** | Road width 12 m, base FAR 2.25, Premium FAR 0.25 | All checks pass; fee ₹50,85,380 match | Verified |
-| **APP-0003** | Premium FAR 0.50 + TDR 0.40 = 0.90 (exceeds 0.60 cap by 0.30) | `FAR_CAP` violation; fee demand blocked | Verified |
-| **APP-0005** | Plot area 200 sq.m; ground coverage 63% $\le 65\%$ permitted | All checks pass; fee ₹1,29,470 match | Verified |
-| **APP-0006** | As-built built-up area deviation +12.00% (> 10% maximum limit) | `CC_REFUSED` (area excess non-compoundable) | Verified |
-| **APP-0007** | As-built built-up area deviation +10.00% (on the 10% ceiling) | `CC_ISSUED` (4× dev charge slab = ₹65,280) | Verified |
-| **APP-0008** | Approved Feb 25; no commencement within 6 months | `SUSPENDED` Aug 25; revalidated with ₹5,000 | Verified |
-| **APP-0009** | As-built built-up area deviation +5.00% | `CC_ISSUED` (2× dev charge slab = ₹8,190) | Verified |
-| **APP-0010** | Setback deviation 0.30 m on 2 sides | `CC_ISSUED` (setback compounded = ₹6,000) | Verified |
-| **APP-0011** | First extension request granted; second extension requested | 1st `EXTENSION` granted; 2nd `REJECTED` | Verified |
-| **APP-0013** | As-built height +0.40 m above approved height | `CC_REFUSED` (height is never compoundable) | Verified |
-| **APP-0014** | Ground coverage exceeds 60% on 201–500 sq.m plot | `GROUND_COVERAGE` violation; fees blocked | Verified |
-| **APP-0015** | Front setback 4.0 m on 15 m road (needs 4.5 m) | `SETBACK_FRONT` violation; fees blocked | Verified |
-| **APP-0017** | Parking 10 cars required, 8 proposed (exactly 20% shortfall) | `PARKING` passes; ₹4,00,000 shortfall fee | Verified |
-| **APP-0018** | Side setback 1.20 m on 10.5 m plot width (deviation 0.30 m) | Compoundable setback; fees generated | Verified |
-| **APP-0019** | Query issued; applicant responds on 30th calendar day | Clock paused for 30 days; approved Jun 02 | Verified |
-| **APP-0020** | Corner plot secondary road setback 2.20 m (deviation 0.30 m) | Compoundable setback; fees generated | Verified |
-| **APP-0021** | Commercial, Premium 0.50 + TDR 0.10 used, but built FAR exceeds allowed | `FAR_ACHIEVED` violation; fees blocked | Verified |
-| **APP-0023** | Query timeout > 30 days $\rightarrow$ `LAPSED`; revived within 60 days | Revived on Jun 30 with 25% scrutiny fee | Verified |
-| **APP-0024** | Corner plot with two equal 9.0 m roads | Front 3.0 m, second road side 2.5 m (passes) | Verified |
-| **APP-0026** | Premium FAR requested on 9 m road (< 12 m) | `FAR_PREMIUM` road width violation | Verified |
-| **APP-0027** | Parking 12 cars required, 9 proposed (25% shortfall > 20%) | `PARKING` violation; fees blocked | Verified |
-| **APP-0029** | Rear setback 1.50 m on 15 m plot width (needs 2.0 m) | `SETBACK_REAR` violation; fees blocked | Verified |
-| **APP-0031** | Building height 16.0 m on 7.5 m road (exceeds 15 m zone cap) | `HEIGHT_LIMIT` violation; fees blocked | Verified |
-| **APP-0032** | Commercial use in residential-only zone ZN-R1 | `ZONING_USE` violation (first precedence) | Verified |
-| **APP-0034** | Clean application where fees are never paid | Timer never starts; no deemed approval | Verified |
-| **APP-0035** | FAR above base on 10 m road (no premium allowed) | `FAR_ACHIEVED` violation; fees blocked | Verified |
+- **Technical Decision Log**: Detailed architectural decisions, data models, and business logic rationales are recorded in [`docs/decision_log.md`](docs/decision_log.md).
+- **Demonstration Video**: Outline and link for the 5-minute project demonstration video are located in [`docs/demo_video.md`](docs/demo_video.md).
+- **Software Design Document (SDD)**: `docs/T060_PS-115_Software_Design_Document.pdf` *(Placeholder: to be uploaded separately)*.
 
 ---
 
-## 6. Documentation & Viva Readiness
+## 10. Limitations
 
-Detailed engineering design documentation, Mermaid UML class and state diagrams, a complete decision log, and oral examination defense Q&A are available in;
-- [`docs/design_document.md`](docs/design_document.md)
-- [`docs/dev_log.md`](docs/dev_log.md)
+- **Headless Execution**: The system is designed as a headless, file-driven command-line engine and batch pipeline. It does not provide a web user interface (GUI) or browser frontend.
+- **Statutory Scope**: Enforces the specific municipal planning rules, setback tables, height caps, and fee structures defined in the PS-115 problem statement.
+- **Data Persistence**: Operates directly on structured CSV and command stream text files; does not require an external SQL or NoSQL database server.
