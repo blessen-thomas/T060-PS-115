@@ -1,4 +1,4 @@
-# Python byte-compiled / optimized files
+# Byte-compiled / optimized files
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,8 +13,16 @@ htmlcov/
 env/
 venv/
 ENV/
+env.bak/
+venv.bak/
 
-# IDE / Editor folders
+# IDE and editor files
 .vscode/
 .idea/
 *.swp
+*.swo
+*~
+
+# Operating system files
+.DS_Store
+Thumbs.db

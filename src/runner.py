@@ -414,7 +414,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="PS-115 Municipal Engine Command Pipeline Runner")
     parser.add_argument("commands", nargs="?", default="data/commands.txt", help="Path to commands.txt")
     parser.add_argument("--data-dir", default="data", help="Directory holding municipal input CSV tables")
-    parser.add_argument("--output-dir", default=".", help="Directory to export the 4 output CSV files")
+    parser.add_argument("--output-dir", default="outputs", help="Directory to export the 4 output CSV files")
     parser.add_argument("--verbose", action="store_true", help="Print command processing progress")
 
     args = parser.parse_args()
